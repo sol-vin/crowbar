@@ -1,5 +1,5 @@
 # crowbar
-* Prying your client since 2019 *
+*Prying your client since 2019*
 
 ![crowbar](https://github.com/redcodefinal/crowbar/raw/master/crowbar.gif "Crowbar")
 
