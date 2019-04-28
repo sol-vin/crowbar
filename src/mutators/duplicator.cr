@@ -1,5 +1,5 @@
 # Duplicates symbols next to each other
-class Mutator::RepeaterDuplicator < Mutator
+class Crowbar::Mutator::RepeaterDuplicator < Crowbar::Mutator
   @regex : Regex = Constants::Regex::SYMBOLS
   def initialize(crowbar, @regex = Constants::Regex::SYMBOLS)
     super crowbar

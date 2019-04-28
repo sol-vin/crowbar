@@ -1,13 +1,21 @@
 abstract class Crowbar::Mutator
-  getter selectors = [] of Selector
+  # Keeps track of parent selector
+  getter selector : Selector
+  # Keeps track of children generators
+  getter generators = [] of Crowbar::Generator
   getter iteration = 0
 
   def initialize(@selector)
     @selector << self
+    yield self
   end
 
-  def << (selector : Selector)
-    @selectors << selector
+  def << (generator : Crowbar::Generator)
+    @generators << generator
+  end
+
+  private def crowbar
+    selector.crowbar
   end
 
   abstract def mutate(input : String) : String

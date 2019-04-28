@@ -1,6 +1,9 @@
-class Selector::Regex < Selector
-  @regex : Regex
-  def initialize(@regex)
+class Crowbar::Selector::Regex < Crowbar::Selector
+  @regex = /a/
+  def initialize(crowbar, @regex)
+    super crowbar do |cr|
+      yield cr
+    end
   end
 
   def select(input) : Array(Crowbar::Match)

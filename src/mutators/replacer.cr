@@ -1,10 +1,11 @@
 # Replaces symbols
-class Mutator::Replacer < Mutator
+class Crowbar::Mutator::Replacer < Crowbar::Mutator
   @regex : Regex
-  @generator : Generator
 
-  def initialize(crowbar, @generator = Generator::Decimals.new(crowbar), @regex = Constants::Regex::IN_QUOTES)
-    super crowbar
+  def initialize(selector, @regex = Crowbar::Constants::Regex::IN_QUOTES)
+    super selector do |m|
+      yield m
+    end
   end
 
   def mutate(input) : String

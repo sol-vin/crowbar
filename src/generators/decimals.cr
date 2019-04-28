@@ -1,4 +1,4 @@
-class Generator::Decimals < Generator
+class Crowbar::Generator::Decimals < Crowbar::Generator
   def initialize(crowbar, length_limit = (0..10))
     super crowbar, length_limit
   end

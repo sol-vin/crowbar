@@ -6,6 +6,7 @@ abstract class Crowbar::Selector
 
   def initialize(@crowbar)
     @crowbar << self
+    yield self
   end
 
   def << (mutator)

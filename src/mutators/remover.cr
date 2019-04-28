@@ -1,5 +1,5 @@
 # Removes symbols
-class Mutator::Remover < Mutator
+class Crowbar::Mutator::Remover < Crowbar::Mutator
   @regex : Regex = Constants::Regex::SYMBOLS
   def initialize(crowbar, @regex = Constants::Regex::SYMBOLS)
     super crowbar

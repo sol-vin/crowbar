@@ -6,6 +6,10 @@ abstract class Crowbar::Generator
   def initialize(@mutator, @length_limit = (0..10))
     @mutator << self
   end
+
+  private def crowbar
+    mutator.selector.crowbar
+  end
   
   abstract def make : String
 end
