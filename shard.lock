@@ -1,0 +1,6 @@
+version: 1.0
+shards:
+  perlin_noise:
+    github: redcodefinal/perlin_noise
+    commit: 6285390ce3d616a7724aec80da8c55bf03c27586
+

@@ -1,0 +1,17 @@
+name: crowbar
+version: 0.0.0.1
+
+authors:
+  - Ian Rash <ian@0x42424242.in>
+
+dependencies:
+  perlin_noise:
+    github: redcodefinal/perlin_noise
+
+targets:
+  crowbar:
+    main: src/crowbar.cr
+
+crystal: 0.27.2
+
+license: MIT
