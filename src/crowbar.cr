@@ -38,39 +38,48 @@ class Crowbar
 
   # Give the next test string
   def next : String
-    @working_input = @input
+    retry = true
+    while retry
+      retry = false
+      @working_input = @input
 
-    selectors.each_with_index do |selector, index|
-      if selector.weight > noise.height_float(@iteration, selector.iteration + index)
-        selector.mutators.each do |mutator|
-          # Mutate each match
-          mutants = selector.matches.map_with_index do |match, index|
-            if match.matched?
-              if mutator.weight > noise.height_float(@iteration, mutator.iteration + index)
-                string = mutator.mutate(match)
-                match.string = string
-                mutator.lose
-              else
-                mutator.gain
+      selectors.each_with_index do |selector, index|
+        if selector.weight > noise.height_float(@iteration, selector.iteration + index)
+          selector.mutators.each do |mutator|
+            # Mutate each match
+            mutants = selector.matches.map_with_index do |match, index|
+              if match.matched?
+                if mutator.weight > noise.height_float(@iteration, mutator.iteration + index)
+                  string = mutator.mutate(match)
+                  match.string = string
+                  mutator.lose
+                else
+                  mutator.gain
+                end
               end
+              match
             end
-            match
+
+            # Join matches back together again
+            if mutants.empty?
+              retry = true
+            else
+              temp = ""
+              mutants.each do |match|
+                temp += match.string
+              end
+              @working_input = temp
+            end
           end
 
-          # Join matches back together again
-          if mutants.empty?
-            @working_input = @input
-          else
-            temp = ""
-            mutants.each do |match|
-              temp += match.string
-            end
-            @working_input = temp
-          end
+          selector.lose
+        else
+          selector.gain
         end
-        selector.lose
-      else
-        selector.gain
+
+      end
+      if @working_input == @input
+        retry = true
       end
     end
     @iteration += 1

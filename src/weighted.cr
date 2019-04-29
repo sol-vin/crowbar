@@ -10,16 +10,10 @@ module Weighted
   end
 
   def lose
-    @weight -= (MAX_LOSS*personal_weight)
-    if @weight < 0
-      @weight = 0.0_f32
-    end
+    @weight -= MAX_LOSS
   end
 
   def gain
-    @weight += (MAX_GAIN*personal_weight)
-    if @weight > 1
-      @weight = 1.0_f32
-    end
+    @weight += (MAX_GAIN * @personal_weight)
   end
 end
