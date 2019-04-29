@@ -90,6 +90,7 @@ class Crowbar::Selector::Regex < Crowbar::Selector
         full_matches << match
       end
     end
+    @iteration += 1
     full_matches
   end 
 end

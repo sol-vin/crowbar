@@ -1,8 +1,6 @@
 class Crowbar::Generator::Bytes < Crowbar::Generator
-  property? quoted = false
-
-  def initialize(mutator, length_limit = (2..6), @quoted = false)
-    super mutator, length_limit
+  def initialize(mutator, length_limit = (2..6), no_register = false)
+    super mutator, length_limit, no_register: no_register
   end
   
   def make : ::String
@@ -13,6 +11,6 @@ class Crowbar::Generator::Bytes < Crowbar::Generator
       output += ::String.new(::Bytes[byte.to_u8])
     end
     @iteration += 1
-    quoted? ? "\"" + output + "\"" : output
+    output
   end
 end

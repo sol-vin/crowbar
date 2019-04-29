@@ -7,11 +7,7 @@ class Crowbar::Mutator::Replacer < Crowbar::Mutator
   end
 
   def mutate(match : Crowbar::Match) : String
-    if @generators.size >= 2
-      item = crowbar.noise.item(iteration, crowbar.iteration, @generators).make
-    else
-      item = @generators[0].make
-    end
+    item = crowbar.noise.item(iteration, crowbar.iteration, @generators).make
     @iteration += 1
     item
   end

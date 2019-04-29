@@ -3,6 +3,8 @@ require "perlin_noise"
 require "./constants"
 require "./match"
 
+require "./weighted"
+
 require "./selector"
 require "./selectors/*"
 
@@ -38,27 +40,37 @@ class Crowbar
   def next : String
     @working_input = @input
 
-    noise.shuffle(@iteration, selectors)[0..noise.int(@iteration, 0, @selectors.size)].each do |selector|
-      noise.shuffle(@iteration, selector.mutators)[0..noise.int(@iteration, 0, selector.mutators.size)].each do |mutator|
-        # Mutate each match
-        mutants = selector.matches.map_with_index do |match, index|
-          if match.matched? && noise.bool(@iteration, index, 1, 2)
-            string = mutator.mutate(match)
-            match.string = string
+    selectors.each_with_index do |selector, index|
+      if selector.weight > noise.height_float(@iteration, selector.iteration + index)
+        selector.mutators.each do |mutator|
+          # Mutate each match
+          mutants = selector.matches.map_with_index do |match, index|
+            if match.matched?
+              if mutator.weight > noise.height_float(@iteration, mutator.iteration + index)
+                string = mutator.mutate(match)
+                match.string = string
+                mutator.lose
+              else
+                mutator.gain
+              end
+            end
+            match
           end
-          match
-        end
 
-        # Join matches back together again
-        if mutants.empty?
-          @working_input = @input
-        else
-          temp = ""
-          mutants.each do |match|
-            temp += match.string
+          # Join matches back together again
+          if mutants.empty?
+            @working_input = @input
+          else
+            temp = ""
+            mutants.each do |match|
+              temp += match.string
+            end
+            @working_input = temp
           end
-          @working_input = temp
         end
+        selector.lose
+      else
+        selector.gain
       end
     end
     @iteration += 1

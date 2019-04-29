@@ -1,8 +1,7 @@
 class Crowbar::Generator::Decimal < Crowbar::Generator
-  property? quoted = false
   property? float = false
-  def initialize(mutator, length_limit = (2..6), @quoted = false, @float = false)
-    super mutator, length_limit
+  def initialize(mutator, length_limit = (1..6), @float = false, no_register = false)
+    super mutator, length_limit, no_register: no_register
   end
   
   def make : ::String
@@ -19,9 +18,9 @@ class Crowbar::Generator::Decimal < Crowbar::Generator
     end
     @iteration += 1
     if float?
-      quoted? ? "\"" + output.to_f.to_s + "\"" : output.to_f.to_s
+      output.to_f.to_s
     else
-      quoted? ? "\"" + output.to_i.to_s + "\"" : output.to_i.to_s
+      output.to_i.to_s
     end
   end
 end

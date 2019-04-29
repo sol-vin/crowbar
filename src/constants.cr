@@ -18,8 +18,8 @@ class Crowbar
     end
 
     module Naughty
-      ALL = (NULLS + LOGIC + OPERATIONS + CODE + NUMBERS + SYMBOLS + EMPTY).uniq
-      NULLS = [
+      ALL = (NULL + LOGIC + OPERATIONS + CODE + NUMBERS + SYMBOLS + EMPTY).uniq
+      NULL = [
         "undefined",
         "undef",
         "null",

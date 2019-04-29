@@ -1,4 +1,6 @@
 abstract class Crowbar::Selector
+  include Weighted
+  
   getter crowbar : Crowbar
   getter mutators = [] of Crowbar::Mutator
 

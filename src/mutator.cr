@@ -1,12 +1,15 @@
 abstract class Crowbar::Mutator
+  include Weighted
   # Keeps track of parent selector
   getter selector : Crowbar::Selector
   # Keeps track of children generators
   getter generators = [] of Crowbar::Generator
   getter iteration = 0
 
-  def initialize(@selector)
-    @selector << self
+  def initialize(@selector, no_register = false)
+    unless no_register
+      @selector << self
+    end
     yield self
   end
 
