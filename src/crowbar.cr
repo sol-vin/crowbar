@@ -40,7 +40,7 @@ class Crowbar
     noise.shuffle(@iteration, selectors)[0..noise.int(@iteration, 0, @selectors.size)].each do |selector|
       noise.shuffle(@iteration, selector.mutators)[0..noise.int(@iteration, 0, selector.mutators.size)].each do |mutator|
         mutants = selector.matches.map_with_index do |match, index|
-          if match.matched? && noise.bool(@iteration, index, 1, 5)
+          if match.matched? && noise.bool(@iteration, index, 1, 4)
             string = mutator.mutate(match)
             match.string = string
           end
