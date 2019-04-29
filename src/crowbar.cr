@@ -1,6 +1,7 @@
 require "perlin_noise"
 
 require "./constants"
+require "./match"
 
 require "./selector"
 require "./selectors/*"
@@ -16,44 +17,44 @@ class Crowbar
   VERSION = "0.0.0.1"
   
   getter seed : Int32 = 0
-  getter iteration : UInt32 = 0
+  getter iteration : Int32 = 0
   getter input : String = ""
+  getter working_input : String = ""
   
   getter selectors : Array(Selector) = [] of Selector
 
   getter noise : PerlinNoise = PerlinNoise.new
-
 
   def initialize(@input = "", @seed = 1234)
     restart
     yield self
   end
 
-  def << (selector : Crowbar::Selector)
+  def << (selector : Selector)
     @selectors << selector
   end
 
   # Give the next test string
   def next : String
-    output = input
-    matches = [] of Crowbar::Match
-    # Shuffle mutators, select number via range
-    @noise.shuffle(@iteration, selectors)[0..@noise.int(@iteration, 0, @selectors.size)].each do |selector|
-      effect = noise.height_float(iteration, iteration, 1)
-      shuffled_selectors = noise.shuffle(iteration, selector.select(input))
-      used_selectors = shuffled_selectors[0..(shuffled_selectors.size * effect).to_i]
-      used_selectors.each do |match|
-        effect = noise.height_float(iteration, iteration, 1)
-        shuffled_mutators = noise.shuffle(iteration, selector.mutators)
-        used_mutators = shuffled_mutators[0..(selector.mutators.size * effect).to_i]
-        mutated = match.match
-        used_mutators.each do |mutator|
-          mutated = mutator.mutate(mutated)
+    @working_input = @input
+    noise.shuffle(@iteration, selectors)[0..noise.int(@iteration, 0, @selectors.size)].each do |selector|
+      noise.shuffle(@iteration, selector.mutators)[0..noise.int(@iteration, 0, selector.mutators.size)].each do |mutator|
+        mutants = selector.matches.map_with_index do |match, index|
+          if match.matched? && noise.bool(@iteration, index, 1, 5)
+            string = mutator.mutate(match)
+            match.string = string
+          end
+          match
         end
+        temp = ""
+        mutants.each do |match|
+          temp += match.string
+        end
+        @working_input = temp
       end
     end
     @iteration += 1
-    output
+    @working_input
   end
 
   # give next test string and replace input with it
@@ -64,6 +65,9 @@ class Crowbar
   # Restart back to beginning
   def restart
     @noise = PerlinNoise.new @seed
+    @working_input = @input
     @iteration = 0
+
+    #TODO: RESET ALL MUTATORS, GENERATORS, SELECTORS!
   end
 end

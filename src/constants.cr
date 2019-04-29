@@ -5,6 +5,7 @@ class Crowbar
     NUMBERS = '0'...'9'
 
     module Regex
+      EACH_CHAR = //
       UPPER_ALPHA = /[A-Z]/
       LOWER_ALPHA = /[a-z]/
       DIGIT = /\d/

@@ -1,6 +1,6 @@
 abstract class Crowbar::Mutator
   # Keeps track of parent selector
-  getter selector : Selector
+  getter selector : Crowbar::Selector
   # Keeps track of children generators
   getter generators = [] of Crowbar::Generator
   getter iteration = 0
@@ -18,5 +18,5 @@ abstract class Crowbar::Mutator
     selector.crowbar
   end
 
-  abstract def mutate(input : String) : String
+  abstract def mutate(match : Crowbar::Match) : String
 end
