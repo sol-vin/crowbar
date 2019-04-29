@@ -31,7 +31,24 @@ class Crowbar::Selector::Regex < Crowbar::Selector
       if match.start == 0 && m_index == 0
         # Add it to the matches
         full_matches << match
-      # If we are the first m_index, and also there is text behind it
+      # If we are the only m_index, and also there is text behind it and in front of it
+      elsif m_index == 0 && matches.size == 1 && match.finish < crowbar.working_input.size-1
+        # make a new match
+        m1 = Crowbar::Match.new
+        m1.finish = match.start-1
+        m1.string = crowbar.working_input[m1.range]
+        m1.matched = false
+
+        m2 = Crowbar::Match.new
+        m2.start = match.finish
+        m2.finish = crowbar.working_input.size
+        m2.string = crowbar.working_input[m2.range]
+        m2.matched = false
+
+        full_matches << m1
+        full_matches << match
+        full_matches << m2
+      # if we are the first m_index, but there is text in front
       elsif m_index == 0
         # make a new match
         m = Crowbar::Match.new

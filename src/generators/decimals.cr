@@ -1,11 +1,11 @@
-class Crowbar::Generator::Decimals < Crowbar::Generator
+class Crowbar::Generator::Decimal < Crowbar::Generator
   property? quoted = false
   property? float = false
   def initialize(mutator, length_limit = (2..6), @quoted = false, @float = false)
     super mutator, length_limit
   end
   
-  def make : String
+  def make : ::String
     length = self.crowbar.noise.int(self.crowbar.iteration, self.length_limit.begin, self.length_limit.end)
     output = ""
     point = self.crowbar.noise.int(self.crowbar.iteration, iteration, 0, length-1)

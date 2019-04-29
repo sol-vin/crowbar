@@ -37,20 +37,28 @@ class Crowbar
   # Give the next test string
   def next : String
     @working_input = @input
+
     noise.shuffle(@iteration, selectors)[0..noise.int(@iteration, 0, @selectors.size)].each do |selector|
       noise.shuffle(@iteration, selector.mutators)[0..noise.int(@iteration, 0, selector.mutators.size)].each do |mutator|
+        # Mutate each match
         mutants = selector.matches.map_with_index do |match, index|
-          if match.matched? && noise.bool(@iteration, index, 1, 4)
+          if match.matched? && noise.bool(@iteration, index, 1, 2)
             string = mutator.mutate(match)
             match.string = string
           end
           match
         end
-        temp = ""
-        mutants.each do |match|
-          temp += match.string
+
+        # Join matches back together again
+        if mutants.empty?
+          @working_input = @input
+        else
+          temp = ""
+          mutants.each do |match|
+            temp += match.string
+          end
+          @working_input = temp
         end
-        @working_input = temp
       end
     end
     @iteration += 1
