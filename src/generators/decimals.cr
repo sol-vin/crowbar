@@ -10,7 +10,7 @@ class Crowbar::Generator::Decimal < Crowbar::Generator
     point = self.crowbar.noise.int(self.crowbar.iteration, iteration, 0, length-1)
     length.times do |x|
       digit_index = self.crowbar.noise.int(self.crowbar.iteration + x, self.iteration, 0, 1000)
-      digit = Crowbar::Constants::NUMBERS.to_a[digit_index % Crowbar::Constants::NUMBERS.size].to_s
+      digit = ::Crowbar::Constants::NUMBERS.to_a[digit_index % ::Crowbar::Constants::NUMBERS.size].to_s
       output += digit
       if float? && x == point
         output += '.'

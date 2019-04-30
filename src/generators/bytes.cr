@@ -3,7 +3,7 @@ class Crowbar::Generator::Bytes < Crowbar::Generator
     super mutator, length_limit, no_register: no_register
   end
   
-  def make : ::String
+  def make(input : ::String = "") : ::String
     length = self.crowbar.noise.int(self.crowbar.iteration, self.iteration, self.length_limit.begin, self.length_limit.end)
     output = ""
     length.times do |x|

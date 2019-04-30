@@ -20,7 +20,7 @@ class Crowbar
   
   getter seed : Int32 = 0
   getter iteration : Int32 = 0
-  getter input : String = ""
+  property input : String = ""
   getter working_input : String = ""
   
   getter selectors : Array(Selector) = [] of Selector

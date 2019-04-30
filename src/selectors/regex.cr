@@ -14,8 +14,9 @@ class Crowbar::Selector::Regex < Crowbar::Selector
     # Translate them to custom match format
     matches = regex_matches.map do |m|
       match = Crowbar::Match.new
+      pp m if m.end.nil?
       match.start = m.begin.as(Int32)
-      match.finish = m.end.as(Int32)
+      match.finish = m.end ? m.end.as(Int32) : 0
       match.string = m[@group]
       match.matched = true
       match

@@ -1,9 +1,9 @@
-abstract class Crowbar::Mutator
+abstract class ::Crowbar::Mutator
   include Weighted
   # Keeps track of parent selector
-  getter selector : Crowbar::Selector
+  getter selector : ::Crowbar::Selector
   # Keeps track of children generators
-  getter generators = [] of Crowbar::Generator
+  getter generators = [] of ::Crowbar::Generator
   getter iteration = 0
 
   def initialize(@selector, no_register = false)
@@ -13,7 +13,7 @@ abstract class Crowbar::Mutator
     yield self
   end
 
-  def << (generator : Crowbar::Generator)
+  def << (generator : ::Crowbar::Generator)
     @generators << generator
   end
 
@@ -21,5 +21,5 @@ abstract class Crowbar::Mutator
     selector.crowbar
   end
 
-  abstract def mutate(match : Crowbar::Match) : String
+  abstract def mutate(match : ::Crowbar::Match) : String
 end

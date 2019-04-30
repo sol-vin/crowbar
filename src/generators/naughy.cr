@@ -7,19 +7,19 @@ class Crowbar::Generator::Naughty < Crowbar::Generator
     type = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, @types)
     output = ""
     if type == :null
-      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, Constants::Naughty::NULL)
+      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, ::Crowbar::Constants::Naughty::NULL)
     elsif type == :logic
-      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, Constants::Naughty::LOGIC)
+      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, ::Crowbar::Constants::Naughty::LOGIC)
     elsif type == :operations
-      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, Constants::Naughty::OPERATIONS)
+      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, ::Crowbar::Constants::Naughty::OPERATIONS)
     elsif type == :code
-      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, Constants::Naughty::CODE)
+      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, ::Crowbar::Constants::Naughty::CODE)
     elsif type == :numbers
-      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, Constants::Naughty::NUMBERS)
+      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, ::Crowbar::Constants::Naughty::NUMBERS)
     elsif type == :symbols
-      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, Constants::Naughty::SYMBOLS)
+      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, ::Crowbar::Constants::Naughty::SYMBOLS)
     elsif type == :empty
-      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, Constants::Naughty::EMPTY)
+      output = self.crowbar.noise.item(self.crowbar.iteration, self.iteration, ::Crowbar::Constants::Naughty::EMPTY)
     end
     @iteration += 1
     output.to_s
