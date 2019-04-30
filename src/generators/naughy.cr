@@ -1,5 +1,4 @@
 class Crowbar::Generator::Naughty < Crowbar::Generator
-
   def initialize(mutator, @types = [:null, :logic, :numbers, :symbols, :empty], no_register = false)
     super mutator, no_register: no_register
   end

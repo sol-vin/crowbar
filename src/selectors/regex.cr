@@ -1,7 +1,7 @@
 class Crowbar::Selector::Regex < Crowbar::Selector
   @regex = //
   @pos = 0
-  def initialize(crowbar, @regex)
+  def initialize(crowbar, @regex, @group = 0)
     super crowbar do |cr|
       yield cr
     end
@@ -16,7 +16,7 @@ class Crowbar::Selector::Regex < Crowbar::Selector
       match = Crowbar::Match.new
       match.start = m.begin.as(Int32)
       match.finish = m.end.as(Int32)
-      match.string = m[0]
+      match.string = m[@group]
       match.matched = true
       match
     end

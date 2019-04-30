@@ -44,12 +44,12 @@ class Crowbar
       @working_input = @input
 
       selectors.each_with_index do |selector, index|
-        if selector.weight > noise.height_float(@iteration, selector.iteration + index)
+        if selector.current_weight > noise.height_float(@iteration, selector.iteration, index)
           selector.mutators.each do |mutator|
             # Mutate each match
             mutants = selector.matches.map_with_index do |match, index|
               if match.matched?
-                if mutator.weight > noise.height_float(@iteration, mutator.iteration + index)
+                if mutator.current_weight > noise.height_float(@iteration, mutator.iteration + index)
                   string = mutator.mutate(match)
                   match.string = string
                   mutator.lose

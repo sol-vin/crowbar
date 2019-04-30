@@ -1,15 +1,19 @@
 class Crowbar::Generator::Wrapper < Crowbar::Generator
-  # TODO: Change to quote_type/wrap_type, [] {} "" '' othjer custom wraps
-  property start = "\""
-  property finish = "\""
+  property wraps = [["\"","\""], 
+                    ["\'","\'"],
+                    ["{", "}"], 
+                    ["[", "]"], 
+                    ["`", "`"],
+                    ["(", ")"]]
 
 
-  def initialize(mutator, @generator : Generator, @types = [:null, :logic, :numbers, :symbols, :empty])
+  def initialize(mutator, @generator : Generator, @wraps = [["\"","\""], ["\'","\'"], ["{", "}"], ["[", "]"], ["`", "`"], ["(", ")"]])
     super mutator
   end
   
   def make : ::String
     @iteration += 1
-    start + @generator.make + finish
+    wrap = crowbar.noise.item(crowbar.iteration, iteration, @wraps)
+    wrap[0] + @generator.make + wrap[1]
   end
 end

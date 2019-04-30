@@ -4,13 +4,13 @@ class Crowbar::Generator::Bytes < Crowbar::Generator
   end
   
   def make : ::String
-    length = self.crowbar.noise.int(self.crowbar.iteration, self.length_limit.begin, self.length_limit.end)
+    length = self.crowbar.noise.int(self.crowbar.iteration, self.iteration, self.length_limit.begin, self.length_limit.end)
     output = ""
     length.times do |x|
-      byte = self.crowbar.noise.int(self.crowbar.iteration + x, self.iteration, 0, 256)
+      byte = self.crowbar.noise.int(self.crowbar.iteration + x + self.iteration, 0, 256)
       output += ::String.new(::Bytes[byte.to_u8])
+      @iteration += 1
     end
-    @iteration += 1
     output
   end
 end
