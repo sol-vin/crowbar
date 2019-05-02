@@ -87,6 +87,6 @@ cr = Crowbar.new(sample_input, seed: (:xiongmai.hash%Int32::MAX).to_i32) do |cr|
   end
 end
 
-100.times do |x|
+10.times do |x|
   pp cr.next
 end
