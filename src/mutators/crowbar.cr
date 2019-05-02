@@ -1,9 +1,9 @@
 # Repeats symbols
 class ::Crowbar::Mutator::Crowbar < ::Crowbar::Mutator
-  def initialize(selector, @crowbar : ::Crowbar)
-    super selector do |m|
-      yield m
-    end
+  @crowbar : ::Crowbar
+  def initialize(selector, &block : ::Crowbar -> Nil)
+    super(selector) { |m| }
+    @crowbar = ::Crowbar.new &block
   end
 
   def mutate(match : ::Crowbar::Match) : String

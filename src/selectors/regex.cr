@@ -14,7 +14,6 @@ class Crowbar::Selector::Regex < Crowbar::Selector
     # Translate them to custom match format
     matches = regex_matches.map do |m|
       match = Crowbar::Match.new
-      pp m if m.end.nil?
       match.start = m.begin.as(Int32)
       match.finish = m.end ? m.end.as(Int32) : 0
       match.string = m[@group]
@@ -60,7 +59,7 @@ class Crowbar::Selector::Regex < Crowbar::Selector
         full_matches << m
         full_matches << match
       # If we are the last match, and we are at the end of the string
-      elsif match.finish == crowbar.working_input.size-1
+      elsif match.finish == crowbar.working_input.size
         # Add it to the matches
         full_matches << match
       # If we are the last index but there is still text after the match

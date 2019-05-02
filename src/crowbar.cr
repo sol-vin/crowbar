@@ -99,4 +99,9 @@ class Crowbar
 
     #TODO: RESET ALL MUTATORS, GENERATORS, SELECTORS!
   end
+
+  def seed=(new_seed)
+    @seed = new_seed
+    restart
+  end
 end

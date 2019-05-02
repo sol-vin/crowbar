@@ -11,6 +11,8 @@ dependencies:
 targets:
   crowbar:
     main: src/crowbar.cr
+  sandbox:
+    main: src/sandbox.cr
 
 crystal: 0.27.2
 
