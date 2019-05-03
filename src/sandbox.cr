@@ -3,6 +3,7 @@ header = "\xFF\x01\x00\xFF\xFE\x02\x00\xFF\x00\x00\x00\x00\x00\x00\xFC\x03\x36\x
 sample_input = header + "{\"Name\":\"SystemInfo\",\"SessionID\":\"0x00000000\"}"
 
 cr = Crowbar.new(sample_input, seed: (:xiongmai.hash%Int32::MAX).to_i32) do |cr|
+  # Each of the range selectors sepcifically select bytes in the 20 byte header
   # Type selector
   Crowbar::Selector::Range.new(cr, (0...3)) do |s|
     s.weight = 0.01
@@ -51,12 +52,11 @@ cr = Crowbar.new(sample_input, seed: (:xiongmai.hash%Int32::MAX).to_i32) do |cr|
     end
   end
 
+  # Excluses the 20 byte header from selection
   # Message selector
   Crowbar::Selector::Header.new(cr, 20, invert: true) do |s|
     s.weight = 10.0
-    Crowbar::Mutator::Crowbar.new(s) do |cr|
-      cr.input = "{\"Name\":\"SystemInfo\",\"SessionID\":\"0x00000000\"}"
-      cr.seed = (:new_crowbar.hash%Int32::MAX).to_i32
+    Crowbar::Mutator::Crowbar.new(s, seed: (:new_crowbar.hash%Int32::MAX).to_i32) do |cr|
       # Selects quoted strings
       Crowbar::Selector::Regex.new(cr, Crowbar::Constants::Regex::IN_QUOTES) do |s|
         s.weight = 1.0
@@ -87,6 +87,6 @@ cr = Crowbar.new(sample_input, seed: (:xiongmai.hash%Int32::MAX).to_i32) do |cr|
   end
 end
 
-10.times do |x|
+100.times do |x|
   pp cr.next
 end

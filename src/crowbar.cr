@@ -43,9 +43,11 @@ class Crowbar
       retry = false
       @working_input = @input
 
-      selectors.each_with_index do |selector, index|
+      shuffled_selectors = noise.shuffle(@iteration, selectors)
+      shuffled_selectors.each_with_index do |selector, index|
         if selector.current_weight > noise.height_float(@iteration, selector.iteration, index)
-          selector.mutators.each do |mutator|
+          shuffled_mutators = noise.shuffle(@iteration, selector.iteration, selector.mutators)
+          shuffled_mutators.each do |mutator|
             # Mutate each match
             mutants = selector.matches.map_with_index do |match, index|
               if match.matched?
