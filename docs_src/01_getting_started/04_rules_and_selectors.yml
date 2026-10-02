@@ -1,0 +1,63 @@
+id: RULES_AND_SELECTORS
+title: Structure Rules & Advanced Selectors
+summary: Reference guide for Crowbar's 10 format rules, advanced selectors, and combinator expressions.
+track: 01_getting_started
+overview: |
+  Crowbar 2.0 features 10 structure-preserving format rules and an arsenal of composable selectors
+  to isolate specific data structures or target valid grammars with precision.
+
+related_sources:
+  - "src/crowbar/selectors/base.cr"
+  - "src/crowbar/rules/base.cr"
+
+sections:
+  - id: topic_01_rules_catalog
+    title: Structure-Preserving Rules (10 Formats)
+    summary: Deep inspection of all available format rules in Crowbar.
+    content: |
+      | Format | Rule Code | Description |
+      | :--- | :--- | :--- |
+      | JSON | `json` | Valid JSON AST with mutated leaf values and bounds |
+      | YAML | `yaml` | Valid YAML document hierarchy with mutated scalars |
+      | HTTP | `http` | RFC HTTP/1.x framing with mutated headers, paths, or body |
+      | DNS | `dns` | RFC 1035 wire-format DNS packets with mutated records |
+      | CSV/TSV | `csv` | RFC 4180 tabular data with column and cell transforms |
+      | XML/HTML | `xml` | Valid XML/HTML document tree with mutated nodes and attributes |
+      | URL | `url` | RFC 3986 URI/URL and query string parameters |
+      | TLV | `tlv` | Type-Length-Value binary packet framing and boundary lengths |
+      | Base64 | `base64` | Transparent Base64 envelope decode-mutate-encode |
+      | Varint | `varint` | LEB128/Protobuf 7-bit continuation bit integer streams |
+
+    examples:
+      - |
+        ```crystal
+        fuzzer = Crowbar.define do
+          preserve :csv  # or :xml, :url, :json, :yaml, :http, :dns, :tlv, :base64, :varint
+        end
+        ```
+
+  - id: topic_02_selectors_and_combinators
+    title: Composable Selectors & Combinators
+    summary: Target columns, character classes, strides, entropy, or combine with &, |, ~.
+    content: |
+      | Selector | DSL Helper | Description |
+      | :--- | :--- | :--- |
+      | `DelimitedField` | `field: 1, delimiter: ','` | Isolates N-th column or token |
+      | `CharacterClass` | `chars: :digits` | Targets contiguous digits, hex, or printable spans |
+      | `Stride` | `stride: 4, offset: 0` | Targets periodic byte slices at regular intervals |
+      | `Entropy` | `entropy: :high` | Targets Shannon entropy slices (:high or :low) |
+      | `Combinators` | `sel_a & sel_b` | Composable intersection (&), union (|), and inversion (~) |
+
+    examples:
+      - |
+        ```crystal
+        fuzzer = Crowbar.define do
+          # Intersect delimited field with character class
+          selector = Crowbar::Selectors::DelimitedField.new(1, ',') &
+                     Crowbar::Selectors::CharacterClass.new(:digits)
+
+          scope :numeric_field, selector: selector do
+            mutate :num, :scale
+          end
+        end
+        ```

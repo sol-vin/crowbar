@@ -4,6 +4,10 @@ require "./sequence"
 require "./line"
 require "./tree"
 require "./values"
+require "./bit"
+require "./arithmetic"
+require "./text"
+require "./layout"
 
 module Crowbar
   # Registry and adaptive selection engine for mutators.
@@ -31,6 +35,10 @@ module Crowbar
       register(Mutators::ByteIncDec.new)
       register(Mutators::ByteRandom.new)
 
+      # Bit mutators
+      register(Mutators::BitFlipRun.new)
+      register(Mutators::WalkingBit.new)
+
       # Sequence mutators
       register(Mutators::SequenceRepeat.new)
       register(Mutators::SequenceDelete.new)
@@ -52,6 +60,19 @@ module Crowbar
       register(Mutators::BoundaryNumbers.new)
       register(Mutators::UnicodeEdgeCases.new)
       register(Mutators::WhitespaceDelimiters.new)
+
+      # Arithmetic & Temporal mutators
+      register(Mutators::ArithmeticScaler.new)
+      register(Mutators::TimestampMutator.new)
+
+      # Text & Encoding mutators
+      register(Mutators::CaseFlip.new)
+      register(Mutators::HomoglyphMutator.new)
+      register(Mutators::DictionaryMutator.new)
+
+      # Layout & Structure mutators
+      register(Mutators::PaddingMutator.new)
+      register(Mutators::TruncationMutator.new)
     end
 
     # Finds mutator by short or full name

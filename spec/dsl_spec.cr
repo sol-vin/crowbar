@@ -47,4 +47,30 @@ describe "Crowbar DSL & Pipeline" do
     res.should be_a(String)
     res.should_not eq("hello world 12345")
   end
+
+  it "configures field and character class scopes in DSL" do
+    fuzzer = Crowbar.define do
+      seed 12345_u64
+
+      scope :column_two, field: 1, delimiter: ',' do
+        mutate :num, :scale
+      end
+    end
+
+    csv = "1,100,admin\n2,200,guest\n"
+    result = fuzzer.fuzz(csv).to_s
+    result.should_not eq(csv)
+  end
+
+  it "configures format preservation in DSL" do
+    fuzzer = Crowbar.define do
+      seed 54321_u64
+      preserve :csv
+    end
+
+    csv = "col1,col2\nval1,val2\n"
+    result = fuzzer.fuzz(csv).to_s
+    parsed = CSV.parse(result)
+    parsed.size.should be >= 1
+  end
 end

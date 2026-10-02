@@ -8,6 +8,12 @@ require "./rules/json"
 require "./rules/yaml"
 require "./rules/http"
 require "./rules/dns"
+require "./rules/csv"
+require "./rules/xml"
+require "./rules/url"
+require "./rules/tlv"
+require "./rules/base64"
+require "./rules/varint"
 require "./evolution/manager"
 
 module Crowbar

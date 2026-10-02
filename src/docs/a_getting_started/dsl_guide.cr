@@ -4,110 +4,110 @@
 # ==============================================================================
 
 {% unless flag?(:release) %}
-module Docs
-  module A_GETTING_STARTED
-    # # Declarative DSL & Scoped Pipelines
-    #
-    # Crowbar provides an expressive block-based DSL to pinpoint specific regions of data,
-    # attach weighted mutators, and calculate post-transform checksums or lengths.
-    #
-    # ### Executive Summary & Key Topics
-    #
-    # <table>
-    #   <thead>
-    #     <tr>
-    #       <th>Topic</th>
-    #       <th>Method / Anchor</th>
-    #       <th>Description</th>
-    #     </tr>
-    #   </thead>
-    #   <tbody>
-    #     <tr>
-    #       <td><strong>Scopes, Matchers, and Fixup Hooks</strong></td>
-    #       <td><code>.topic_01_scopes_and_fixups</code></td>
-    #       <td>Scoping byte ranges, regex captures, and repairing headers with fixups.</td>
-    #     </tr>
-    #   </tbody>
-    # </table>
-    #
-    # ### Related Guides & Source References
-    # - src/crowbar/dsl/builder.cr
-    # - src/crowbar/selectors/base.cr
-    #
-    module DSL_GUIDE
-      # **Scopes, Matchers, and Fixup Hooks**: Scoping byte ranges, regex captures, and repairing headers with fixups.
+  module Docs
+    module A_GETTING_STARTED
+      # # Declarative DSL & Scoped Pipelines
       #
-      # Using `Crowbar.define`, you can isolate portions of an input payload:
+      # Crowbar provides an expressive block-based DSL to pinpoint specific regions of data,
+      # attach weighted mutators, and calculate post-transform checksums or lengths.
+      #
+      # ### Executive Summary & Key Topics
       #
       # <table>
       #   <thead>
       #     <tr>
-      #       <th>Directive</th>
-      #       <th>Syntax</th>
+      #       <th>Topic</th>
+      #       <th>Method / Anchor</th>
       #       <th>Description</th>
       #     </tr>
       #   </thead>
       #   <tbody>
       #     <tr>
-      #       <td>`seed`</td>
-      #       <td>`seed 1234_u64`</td>
-      #       <td>Configures the deterministic PRNG</td>
-      #     </tr>
-      #     <tr>
-      #       <td>`pattern`</td>
-      #       <td>`pattern :burst`</td>
-      #       <td>Sets frequency (:once, :many, :burst)</td>
-      #     </tr>
-      #     <tr>
-      #       <td>`scope`</td>
-      #       <td>`scope :header, bytes: 0...16`</td>
-      #       <td>Constrains mutation to a byte range</td>
-      #     </tr>
-      #     <tr>
-      #       <td>`match`</td>
-      #       <td>`match /"([^"]+)"/, group: 1`</td>
-      #       <td>Targets regex match groups</td>
-      #     </tr>
-      #     <tr>
-      #       <td>`fixup`</td>
-      #       <td>`fixup do \</td>
-      #       <td>buf\</td>
-      #       <td>... end`</td>
-      #       <td>Post-mutation callback for checksums</td>
+      #       <td><strong>Scopes, Matchers, and Fixup Hooks</strong></td>
+      #       <td><code>.topic_01_scopes_and_fixups</code></td>
+      #       <td>Scoping byte ranges, regex captures, and repairing headers with fixups.</td>
       #     </tr>
       #   </tbody>
       # </table>
       #
-      # #### Working Examples
+      # ### Related Guides & Source References
+      # - src/crowbar/dsl/builder.cr
+      # - src/crowbar/selectors/base.cr
       #
-      # ```crystal
-      # fuzzer = Crowbar.define do
-      #   seed 0x1337_u64
-      #   pattern :many
-      #
-      #   # Scope 1: Protect and mutate header
-      #   scope :header, bytes: 0...16 do
-      #     weight 0.2
-      #     mutate :byte_flip, :byte_swap
-      #   end
-      #
-      #   # Scope 2: Mutate payload
-      #   scope :payload, bytes: 16.. do
-      #     weight 0.8
-      #     mutate :boundary_number, :unicode
-      #   end
-      #
-      #   # Fixup: recalculate payload length
-      #   fixup do |buffer|
-      #     next if buffer.size < 16
-      #     len = (buffer.size - 16).to_u32
-      #     IO::ByteFormat::BigEndian.encode(len, buffer[0, 4])
-      #   end
-      # end
-      # ```
-      #
-      def self.topic_01_scopes_and_fixups : Nil; end
+      module DSL_GUIDE
+        # **Scopes, Matchers, and Fixup Hooks**: Scoping byte ranges, regex captures, and repairing headers with fixups.
+        #
+        # Using `Crowbar.define`, you can isolate portions of an input payload:
+        #
+        # <table>
+        #   <thead>
+        #     <tr>
+        #       <th>Directive</th>
+        #       <th>Syntax</th>
+        #       <th>Description</th>
+        #     </tr>
+        #   </thead>
+        #   <tbody>
+        #     <tr>
+        #       <td>`seed`</td>
+        #       <td>`seed 1234_u64`</td>
+        #       <td>Configures the deterministic PRNG</td>
+        #     </tr>
+        #     <tr>
+        #       <td>`pattern`</td>
+        #       <td>`pattern :burst`</td>
+        #       <td>Sets frequency (:once, :many, :burst)</td>
+        #     </tr>
+        #     <tr>
+        #       <td>`scope`</td>
+        #       <td>`scope :header, bytes: 0...16`</td>
+        #       <td>Constrains mutation to a byte range</td>
+        #     </tr>
+        #     <tr>
+        #       <td>`match`</td>
+        #       <td>`match /"([^"]+)"/, group: 1`</td>
+        #       <td>Targets regex match groups</td>
+        #     </tr>
+        #     <tr>
+        #       <td>`fixup`</td>
+        #       <td>`fixup do \</td>
+        #       <td>buf\</td>
+        #       <td>... end`</td>
+        #       <td>Post-mutation callback for checksums</td>
+        #     </tr>
+        #   </tbody>
+        # </table>
+        #
+        # #### Working Examples
+        #
+        # ```
+        # fuzzer = Crowbar.define do
+        #   seed 0x1337_u64
+        #   pattern :many
+        #
+        #   # Scope 1: Protect and mutate header
+        #   scope :header, bytes: 0...16 do
+        #     weight 0.2
+        #     mutate :byte_flip, :byte_swap
+        #   end
+        #
+        #   # Scope 2: Mutate payload
+        #   scope :payload, bytes: 16.. do
+        #     weight 0.8
+        #     mutate :boundary_number, :unicode
+        #   end
+        #
+        #   # Fixup: recalculate payload length
+        #   fixup do |buffer|
+        #     next if buffer.size < 16
+        #     len = (buffer.size - 16).to_u32
+        #     IO::ByteFormat::BigEndian.encode(len, buffer[0, 4])
+        #   end
+        # end
+        # ```
+        #
+        def self.topic_01_scopes_and_fixups : Nil; end
+      end
     end
   end
-end
 {% end %}

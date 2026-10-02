@@ -1,6 +1,65 @@
 require "../buffer"
 
 module Crowbar
+  # Helper algorithms for normalizing, intersecting, unioning, and inverting byte index ranges.
+  module RangeUtils
+    def self.normalize(ranges : Array(Tuple(Int32, Int32))) : Array(Tuple(Int32, Int32))
+      return ranges if ranges.size <= 1
+      valid = ranges.select { |(s, e)| s < e }
+      return [] of Tuple(Int32, Int32) if valid.empty?
+
+      sorted = valid.sort_by { |(s, e)| {s, e} }
+      merged = [] of Tuple(Int32, Int32)
+      cur_s, cur_e = sorted.first
+
+      sorted[1..].each do |(s, e)|
+        if s <= cur_e
+          cur_e = [cur_e, e].max
+        else
+          merged << {cur_s, cur_e}
+          cur_s, cur_e = s, e
+        end
+      end
+      merged << {cur_s, cur_e}
+      merged
+    end
+
+    def self.intersect(ranges_a : Array(Tuple(Int32, Int32)), ranges_b : Array(Tuple(Int32, Int32))) : Array(Tuple(Int32, Int32))
+      norm_a = normalize(ranges_a)
+      norm_b = normalize(ranges_b)
+      result = [] of Tuple(Int32, Int32)
+
+      norm_a.each do |(sa, ea)|
+        norm_b.each do |(sb, eb)|
+          s = [sa, sb].max
+          e = [ea, eb].min
+          result << {s, e} if s < e
+        end
+      end
+      normalize(result)
+    end
+
+    def self.union(ranges_a : Array(Tuple(Int32, Int32)), ranges_b : Array(Tuple(Int32, Int32))) : Array(Tuple(Int32, Int32))
+      normalize(ranges_a + ranges_b)
+    end
+
+    def self.invert(ranges : Array(Tuple(Int32, Int32)), total_size : Int32) : Array(Tuple(Int32, Int32))
+      return [{0, total_size}] if ranges.empty? && total_size > 0
+      norm = normalize(ranges)
+      result = [] of Tuple(Int32, Int32)
+      cur = 0
+
+      norm.each do |(s, e)|
+        s_clamped = [0, [s, total_size].min].max
+        e_clamped = [0, [e, total_size].min].max
+        result << {cur, s_clamped} if s_clamped > cur
+        cur = [cur, e_clamped].max
+      end
+      result << {cur, total_size} if cur < total_size
+      result
+    end
+  end
+
   # Selectors isolate and target specific regions of a buffer for mutation.
   abstract class Selector
     property weight : Float64 = 1.0
@@ -10,124 +69,79 @@ module Crowbar
 
     # Returns an array of target ranges {start_index, end_index_exclusive}
     abstract def select(buffer : Buffer) : Array(Tuple(Int32, Int32))
+
+    # Intersection combinator: targets only byte regions selected by BOTH selectors
+    def &(other : Selector) : Selector
+      Selectors::And.new(self, other)
+    end
+
+    # Union combinator: targets regions selected by EITHER selector
+    def |(other : Selector) : Selector
+      Selectors::Or.new(self, other)
+    end
+
+    # Inversion combinator: targets all regions NOT selected by this selector
+    def ~ : Selector
+      Selectors::Invert.new(self)
+    end
   end
 
   module Selectors
-    # Selects a static byte index range (e.g. 0...16 or 20..)
-    class ByteRange < Selector
-      getter begin_index : Int32
-      getter end_index : Int32?
-      getter? exclusive : Bool
+    # Intersection combinator selector
+    class And < Selector
+      getter left : Selector
+      getter right : Selector
 
-      def initialize(@begin_index : Int32, @end_index : Int32?, @exclusive : Bool = false, weight : Float64 = 1.0)
+      def initialize(@left : Selector, @right : Selector, weight : Float64 = 1.0)
         super(weight)
       end
 
-      def self.new(range : Range(B, E), weight : Float64 = 1.0) forall B, E
-        b = range.begin.to_i32
-        end_val = range.end
-        e = end_val ? end_val.to_i32 : nil
-        new(b, e, range.exclusive?, weight)
-      end
-
       def select(buffer : Buffer) : Array(Tuple(Int32, Int32))
-        return [] of Tuple(Int32, Int32) if buffer.empty?
-
-        b = [0, [@begin_index, buffer.size].min].max
-        e = if val = @end_index
-              val -= 1 if @exclusive
-              [b, [val + 1, buffer.size].min].max
-            else
-              buffer.size
-            end
-
-        return [] of Tuple(Int32, Int32) if b >= e
-        [{b, e}]
+        ranges_a = @left.select(buffer)
+        ranges_b = @right.select(buffer)
+        RangeUtils.intersect(ranges_a, ranges_b)
       end
     end
 
-    # Selects header prefix bytes (or inverted: everything but header)
-    class Header < Selector
-      getter length : Int32
-      getter invert : Bool
+    # Union combinator selector
+    class Or < Selector
+      getter left : Selector
+      getter right : Selector
 
-      def initialize(@length : Int32, @invert : Bool = false, weight : Float64 = 1.0)
+      def initialize(@left : Selector, @right : Selector, weight : Float64 = 1.0)
         super(weight)
       end
 
       def select(buffer : Buffer) : Array(Tuple(Int32, Int32))
-        return [] of Tuple(Int32, Int32) if buffer.empty?
-        split_point = [0, [@length, buffer.size].min].max
-
-        if @invert
-          split_point < buffer.size ? [{split_point, buffer.size}] : [] of Tuple(Int32, Int32)
-        else
-          split_point > 0 ? [{0, split_point}] : [] of Tuple(Int32, Int32)
-        end
+        ranges_a = @left.select(buffer)
+        ranges_b = @right.select(buffer)
+        RangeUtils.union(ranges_a, ranges_b)
       end
     end
 
-    # Selects footer suffix bytes (or inverted: everything but footer)
-    class Footer < Selector
-      getter length : Int32
-      getter invert : Bool
+    # Inversion combinator selector
+    class Invert < Selector
+      getter inner : Selector
 
-      def initialize(@length : Int32, @invert : Bool = false, weight : Float64 = 1.0)
+      def initialize(@inner : Selector, weight : Float64 = 1.0)
         super(weight)
       end
 
       def select(buffer : Buffer) : Array(Tuple(Int32, Int32))
-        return [] of Tuple(Int32, Int32) if buffer.empty?
-        split_point = [0, buffer.size - @length].max
-
-        if @invert
-          split_point > 0 ? [{0, split_point}] : [] of Tuple(Int32, Int32)
-        else
-          split_point < buffer.size ? [{split_point, buffer.size}] : [] of Tuple(Int32, Int32)
-        end
-      end
-    end
-
-    # Selects regions matching a regular expression (with capture group support)
-    class Regex < Selector
-      getter pattern : ::Regex
-      getter group : Int32
-
-      def initialize(@pattern : ::Regex, @group : Int32 = 0, weight : Float64 = 1.0)
-        super(weight)
-      end
-
-      def select(buffer : Buffer) : Array(Tuple(Int32, Int32))
-        str = buffer.to_raw_s
-        matches = [] of Tuple(Int32, Int32)
-
-        str.scan(@pattern) do |match|
-          if @group == 0
-            b = match.byte_begin
-            e = match.byte_end
-            matches << {b, e}
-          elsif match.size > @group
-            b = match.byte_begin(@group)
-            e = match.byte_end(@group)
-            matches << {b, e} if b >= 0 && e >= b
-          end
-        end
-        matches
-      end
-    end
-
-    # Selects matched delimiter blocks (e.g. quotes or brackets)
-    class Delimiters < Selector
-      getter open_byte : UInt8
-      getter close_byte : UInt8
-
-      def initialize(@open_byte : UInt8, @close_byte : UInt8, weight : Float64 = 1.0)
-        super(weight)
-      end
-
-      def select(buffer : Buffer) : Array(Tuple(Int32, Int32))
-        buffer.find_delimiter_pairs(@open_byte, @close_byte)
+        ranges = @inner.select(buffer)
+        RangeUtils.invert(ranges, buffer.size)
       end
     end
   end
 end
+
+require "./byte_range"
+require "./header_footer"
+require "./regex"
+require "./delimiters"
+require "./delimited_field"
+require "./character_class"
+require "./stride"
+require "./entropy"
+require "./json_path"
+require "./xml_tag"

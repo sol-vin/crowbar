@@ -4,97 +4,97 @@
 # ==============================================================================
 
 {% unless flag?(:release) %}
-module Docs
-  module A_GETTING_STARTED
-    # # Feedback-Driven Evolutionary Optimization
-    #
-    # Crowbar enables programs to report candidate execution feedback (success/fitness)
-    # to evolve inputs toward maximizing coverage, depth, or custom test goals.
-    #
-    # ### Executive Summary & Key Topics
-    #
-    # <table>
-    #   <thead>
-    #     <tr>
-    #       <th>Topic</th>
-    #       <th>Method / Anchor</th>
-    #       <th>Description</th>
-    #     </tr>
-    #   </thead>
-    #   <tbody>
-    #     <tr>
-    #       <td><strong>Genetic Algorithms and Diversity Controls</strong></td>
-    #       <td><code>.topic_01_evolution_mechanics</code></td>
-    #       <td>Population selection, crossover, and preventing local locking.</td>
-    #     </tr>
-    #   </tbody>
-    # </table>
-    #
-    # ### Related Guides & Source References
-    # - src/crowbar/evolution/manager.cr
-    # - src/crowbar/evolution/corpus.cr
-    #
-    module EVOLUTION_GUIDE
-      # **Genetic Algorithms and Diversity Controls**: Population selection, crossover, and preventing local locking.
+  module Docs
+    module A_GETTING_STARTED
+      # # Feedback-Driven Evolutionary Optimization
+      #
+      # Crowbar enables programs to report candidate execution feedback (success/fitness)
+      # to evolve inputs toward maximizing coverage, depth, or custom test goals.
+      #
+      # ### Executive Summary & Key Topics
       #
       # <table>
       #   <thead>
       #     <tr>
-      #       <th>Parameter</th>
-      #       <th>Default</th>
-      #       <th>Purpose</th>
+      #       <th>Topic</th>
+      #       <th>Method / Anchor</th>
+      #       <th>Description</th>
       #     </tr>
       #   </thead>
       #   <tbody>
       #     <tr>
-      #       <td>`enabled`</td>
-      #       <td>`true`</td>
-      #       <td>Toggle evolutionary mode on/off</td>
-      #     </tr>
-      #     <tr>
-      #       <td>`population_size`</td>
-      #       <td>`64`</td>
-      #       <td>Maximum candidates preserved in memory</td>
-      #     </tr>
-      #     <tr>
-      #       <td>`exploration_rate`</td>
-      #       <td>`0.15`</td>
-      #       <td>Percentage of forced random baseline inputs</td>
-      #     </tr>
-      #     <tr>
-      #       <td>`crossover_rate`</td>
-      #       <td>`0.25`</td>
-      #       <td>Percentage of hybrid offspring recombination</td>
-      #     </tr>
-      #     <tr>
-      #       <td>`stagnation_limit`</td>
-      #       <td>`100`</td>
-      #       <td>Stagnant cycles before novelty culling</td>
+      #       <td><strong>Genetic Algorithms and Diversity Controls</strong></td>
+      #       <td><code>.topic_01_evolution_mechanics</code></td>
+      #       <td>Population selection, crossover, and preventing local locking.</td>
       #     </tr>
       #   </tbody>
       # </table>
       #
-      # #### Working Examples
+      # ### Related Guides & Source References
+      # - src/crowbar/evolution/manager.cr
+      # - src/crowbar/evolution/corpus.cr
       #
-      # ```crystal
-      # fuzzer = Crowbar.define do
-      #   evolution do
-      #     enabled true
-      #     population_size 32
-      #     exploration_rate 0.15
-      #   end
-      # end
-      #
-      # 1000.times do
-      #   candidate = fuzzer.fuzz(baseline)
-      #   # Evaluate candidate in target program
-      #   fitness_score = evaluate(candidate)
-      #   fuzzer.report(candidate, fitness: fitness_score)
-      # end
-      # ```
-      #
-      def self.topic_01_evolution_mechanics : Nil; end
+      module EVOLUTION_GUIDE
+        # **Genetic Algorithms and Diversity Controls**: Population selection, crossover, and preventing local locking.
+        #
+        # <table>
+        #   <thead>
+        #     <tr>
+        #       <th>Parameter</th>
+        #       <th>Default</th>
+        #       <th>Purpose</th>
+        #     </tr>
+        #   </thead>
+        #   <tbody>
+        #     <tr>
+        #       <td>`enabled`</td>
+        #       <td>`true`</td>
+        #       <td>Toggle evolutionary mode on/off</td>
+        #     </tr>
+        #     <tr>
+        #       <td>`population_size`</td>
+        #       <td>`64`</td>
+        #       <td>Maximum candidates preserved in memory</td>
+        #     </tr>
+        #     <tr>
+        #       <td>`exploration_rate`</td>
+        #       <td>`0.15`</td>
+        #       <td>Percentage of forced random baseline inputs</td>
+        #     </tr>
+        #     <tr>
+        #       <td>`crossover_rate`</td>
+        #       <td>`0.25`</td>
+        #       <td>Percentage of hybrid offspring recombination</td>
+        #     </tr>
+        #     <tr>
+        #       <td>`stagnation_limit`</td>
+        #       <td>`100`</td>
+        #       <td>Stagnant cycles before novelty culling</td>
+        #     </tr>
+        #   </tbody>
+        # </table>
+        #
+        # #### Working Examples
+        #
+        # ```
+        # fuzzer = Crowbar.define do
+        #   evolution do
+        #     enabled true
+        #     population_size 32
+        #     exploration_rate 0.15
+        #   end
+        # end
+        #
+        # 1000.times do
+        #   candidate = fuzzer.fuzz(baseline)
+        #   # Evaluate candidate in target program
+        #   fitness_score = evaluate(candidate)
+        #   fuzzer.report(candidate, fitness: fitness_score)
+        # end
+        # ```
+        #
+        def self.topic_01_evolution_mechanics : Nil; end
+      end
     end
   end
-end
 {% end %}
