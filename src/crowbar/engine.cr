@@ -22,10 +22,16 @@ module Crowbar
     getter name : String
     getter selector : Selector
     getter pool : MutatorPool
+    getter rules : Array(Rule)
     property weight : Float64
 
     def initialize(@name : String, @selector : Selector, @weight : Float64 = 1.0)
       @pool = MutatorPool.new
+      @rules = [] of Rule
+    end
+
+    def add_rule(rule : Rule)
+      @rules << rule
     end
   end
 
@@ -121,8 +127,25 @@ module Crowbar
             prob = total_scope_weight > 0 ? (sc.weight / total_scope_weight) : 1.0
             if @context.prng.rand_bool(prob)
               target_ranges = sc.selector.select(working)
-              target_ranges.each do |range|
-                @pattern.apply(@context, working, sc.pool, range)
+              target_ranges.reverse_each do |range|
+                applied_scope_rule = false
+                unless sc.rules.empty?
+                  slice_len = range[1] - range[0]
+                  if slice_len > 0 && range[0] >= 0 && range[1] <= working.size
+                    sub_buf = Buffer.new(working[range[0], slice_len])
+                    sc.rules.each do |rule|
+                      if rule.match?(sub_buf) && rule.apply(@context, sub_buf)
+                        working.replace_range(range[0], slice_len, sub_buf.to_slice)
+                        applied_scope_rule = true
+                        break
+                      end
+                    end
+                  end
+                end
+
+                unless applied_scope_rule
+                  @pattern.apply(@context, working, sc.pool, range) unless sc.pool.mutators.empty?
+                end
               end
             end
           end

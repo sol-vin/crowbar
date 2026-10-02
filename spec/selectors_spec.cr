@@ -143,4 +143,31 @@ describe "Crowbar Selectors & Combinators" do
       String.new(buffer[ranges[0][0]...ranges[0][1]]).should eq("_REST_OF_DATA")
     end
   end
+
+  describe Crowbar::Selectors::ByteRange do
+    it "selects explicit sub-ranges" do
+      buffer = Crowbar::Buffer.new("0123456789")
+      sel = Crowbar::Selectors::ByteRange.new(2..6)
+      ranges = sel.select(buffer)
+      ranges.size.should eq(1)
+      ranges.first.should eq({2, 7})
+    end
+
+    it "supports open-ended ranges" do
+      buffer = Crowbar::Buffer.new("PREFIX_PAYLOAD")
+      sel = Crowbar::Selectors::ByteRange.new(7..)
+      ranges = sel.select(buffer)
+      ranges.size.should eq(1)
+      String.new(buffer[ranges[0][0]...ranges[0][1]]).should eq("PAYLOAD")
+    end
+
+    it "supports negative index offsets relative to end" do
+      buffer = Crowbar::Buffer.new("HDR:IMPORTANT_BODY:TRL")
+      # Select internal body excluding 4-byte header and 4-byte trailer (:TRL)
+      sel = Crowbar::Selectors::ByteRange.new(4...-4)
+      ranges = sel.select(buffer)
+      ranges.size.should eq(1)
+      String.new(buffer[ranges[0][0]...ranges[0][1]]).should eq("IMPORTANT_BODY")
+    end
+  end
 end

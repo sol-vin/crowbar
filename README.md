@@ -75,15 +75,30 @@ shards build crowbar
 ### 1. Pipe-In, Pipe-Out (UNIX Filter Mode)
 
 ```bash
-# Transform data flowing through a pipe
-echo '{"user": "alice", "age": 30}' | bin/crowbar --rule json
+# Transform data flowing through a pipe while preserving JSON syntax
+echo '{"user": "alice", "age": 30, "admin": false}' | bin/crowbar --rule json -s 42
+```
+
+**Output:**
+```json
+{"user":"32767","age":30,"admin":false}
 ```
 
 ### 2. Opal TrueColor Hex Diff
 
 ```bash
 # Visually inspect byte-level differences directly in your terminal
-bin/crowbar --diff --seed 42 sample.bin
+echo '{"hello": "world"}' | bin/crowbar --diff --seed 42
+```
+
+**Output:**
+```text
+=== Crowbar Hex Diff ===
+Original Size: 19 B | Mutated Size: 29 B
+----------------------------------------------------------------
+00000000: 7B 22 68 34 32 39 34 39  36 37 32 39 35 65 6C 6C  |{"h4294967295ell|
+00000010: 6F 22 3A 20 22 77 6F 72  6C 64 22 7D 0A           |o": "world"}.   |
+----------------------------------------------------------------
 ```
 
 ### 3. Batch Test Case Generation
@@ -97,6 +112,28 @@ bin/crowbar -n 100 -s 1337 -o "fuzz-%n.bin" samples/*.bin
 
 ```bash
 bin/crowbar --list
+```
+
+**Output:**
+```text
+=== Crowbar Component Catalog ===
+
+Structure-Preserving Rules (10 Formats):
+  json       Valid JSON AST with mutated leaf values and bounds
+  yaml       Valid YAML document hierarchy with mutated scalars
+  http       RFC HTTP/1.x framing with mutated headers, paths, or body
+  dns        RFC 1035 wire-format DNS packets with mutated records
+  csv        RFC 4180 CSV/TSV tabular data with column and cell transforms
+  xml        Valid XML/HTML document tree with mutated nodes and attributes
+  url        RFC 3986 URI/URL and query string parameters
+  tlv        Type-Length-Value binary packet framing and boundary lengths
+  base64     Transparent Base64 envelope decode-mutate-encode
+  varint     LEB128/Protobuf 7-bit continuation bit integer streams
+
+Mutation Patterns:
+  od, once   - Mutate once at a single target
+  nd, many   - Mutate multiple times with geometric probability decay (default)
+  bu, burst  - Mutate in localized burst clusters
 ```
 
 ---
@@ -113,6 +150,11 @@ mutant = Crowbar.fuzz(sample, seed: 42_u64)
 puts mutant
 ```
 
+**Output:**
+```text
+The quick brown fox jumps 4294967295over the lazy dog 12345
+```
+
 ### 2. Structured Protocol Framing & Length Fixups
 
 ```crystal
@@ -120,7 +162,7 @@ require "crowbar"
 
 # Modernized protocol fuzzer: 16-byte binary header + JSON body
 fuzzer = Crowbar.define do
-  seed 0x1337_u64
+  seed 42_u64
 
   # Use multi-pass burst pattern
   pattern :burst
@@ -138,8 +180,27 @@ fuzzer = Crowbar.define do
   end
 end
 
-sample_packet = File.read("packet.bin").to_slice
-mutant = fuzzer.fuzz(sample_packet)
+header = Bytes.new(16, 0_u8)
+json_payload = %({"status": "active", "code": 200, "meta": {"debug": false}}).to_slice
+packet = IO::Memory.new
+packet.write(header)
+packet.write(json_payload)
+
+mutant = fuzzer.fuzz(packet.to_slice)
+```
+
+**Output:**
+```text
+[1] Total: 68 B | Header Len: 52 B | Actual Body: 52 B
+    Body JSON: {"status":"32767","code":200,"meta":{"debug":false}}
+[2] Total: 63 B | Header Len: 47 B | Actual Body: 47 B
+    Body JSON: {"status":"","code":200,"meta":{"debug":false}}
+[3] Total: 89 B | Header Len: 73 B | Actual Body: 73 B
+    Body JSON: {"status":"active","code":200,"meta":{"debug":false,"debug_extra":false}}
+[4] Total: 58 B | Header Len: 42 B | Actual Body: 42 B
+    Body JSON: {"status":"active","meta":{"debug":false}}
+[5] Total: 86 B | Header Len: 70 B | Actual Body: 70 B
+    Body JSON: {"status":"active","code":200,"meta":{"debug":false},"code_extra":200}
 ```
 
 ### 3. Feedback-Driven Evolutionary Optimization
@@ -162,7 +223,7 @@ end
 
 baseline = "SELECT id, name FROM users WHERE age > 18"
 
-1000.times do
+100.times do
   candidate = fuzzer.fuzz(baseline)
 
   # Evaluate candidate with your target program or parser
@@ -171,6 +232,174 @@ baseline = "SELECT id, name FROM users WHERE age > 18"
   # Report feedback to guide subsequent generations
   fuzzer.report(candidate, fitness: fitness)
 end
+```
+
+**Output:**
+```text
+Baseline Input: SELECT id, name FROM users WHERE age > 18
+Goal: Evolve inputs that maximize length and character diversity
+
+Iteration 25: Best Fitness = 515.0 (Size: 810 B)
+Iteration 50: Best Fitness = 661.0 (Size: 1102 B)
+Iteration 75: Best Fitness = 1215.5 (Size: 2191 B)
+Iteration 100: Best Fitness = 2318.0 (Size: 4384 B)
+```
+
+---
+
+## Practical Runnable Examples
+
+The repository includes runnable, documented example programs under [`examples/`](examples) showcasing real-world testing workflows:
+
+### 1. Structured JSON Protocol Fuzzer (`examples/json_protocol_fuzzer.cr`)
+Fuzzes a compound packet featuring a 16-byte binary header followed by a JSON payload. Employs `preserve :json` within a scoped byte range to guarantee valid JSON syntax while mutating AST nodes, paired with a `fixup` hook that updates the 4-byte big-endian header length field.
+
+```bash
+crystal run examples/json_protocol_fuzzer.cr
+```
+
+**Output:**
+```text
+=== Original Packet (75 bytes) ===
+Bytes[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 123, 34, 115, 116, 97, 116, 117, 115, 34, 58, 32, 34, 97, 99, 116, 105, 118, 101, 34, 44, 32, 34, 99, 111, 100, 101, 34, 58, 32, 50, 48, 48, 44, 32, 34, 109, 101, 116, 97, 34, 58, 32, 123, 34, 100, 101, 98, 117, 103, 34, 58, 32, 102, 97, 108, 115, 101, 125, 125]
+
+=== Generating 5 Mutated Packets ===
+[1] Total: 68 B | Header Len: 52 B | Actual Body: 52 B
+    Body JSON: {"status":"32767","code":200,"meta":{"debug":false}}
+[2] Total: 63 B | Header Len: 47 B | Actual Body: 47 B
+    Body JSON: {"status":"","code":200,"meta":{"debug":false}}
+[3] Total: 89 B | Header Len: 73 B | Actual Body: 73 B
+    Body JSON: {"status":"active","code":200,"meta":{"debug":false,"debug_extra":false}}
+[4] Total: 58 B | Header Len: 42 B | Actual Body: 42 B
+    Body JSON: {"status":"active","meta":{"debug":false}}
+[5] Total: 86 B | Header Len: 70 B | Actual Body: 70 B
+    Body JSON: {"status":"active","code":200,"meta":{"debug":false},"code_extra":200}
+```
+
+### 2. Feedback-Driven Genetic Evolution (`examples/genetic_evolution_demo.cr`)
+Uses genetic search (tournament selection, crossover splicing, and $\epsilon$-greedy exploration) to iteratively evolve inputs toward maximizing fitness metrics and exploring deeper code paths.
+
+```bash
+crystal run examples/genetic_evolution_demo.cr
+```
+
+**Output:**
+```text
+Baseline Input: SELECT id, name FROM users WHERE age > 18
+Goal: Evolve inputs that maximize length and character diversity
+
+Iteration 25: Best Fitness = 515.0 (Size: 810 B)
+Iteration 50: Best Fitness = 661.0 (Size: 1102 B)
+Iteration 75: Best Fitness = 1215.5 (Size: 2191 B)
+Iteration 100: Best Fitness = 2318.0 (Size: 4384 B)
+```
+
+### 3. HTTP/1.x Request Fuzzer (`examples/http_request_fuzzer.cr`)
+Demonstrates structure-preserving HTTP/1.x mutation (`preserve :http`). Generates path traversal injections (`/../`), duplicate headers, and boundary numeric values while strictly preserving RFC 7230 CRLF message framing.
+
+```bash
+crystal run examples/http_request_fuzzer.cr
+```
+
+**Output:**
+```text
+=== Original HTTP Request ===
+POST /api/v1/auth/login?redirect=/dashboard HTTP/1.1
+Host: api.example.com
+User-Agent: Crowbar/1.0
+Content-Type: application/json
+Content-Length: 35
+
+{"user": "admin", "token": "secret"}
+=============================
+
+=== Generating 4 Mutated HTTP Requests ===
+--- [Mutant #1] ---
+POST /api/v1/auth/login?redirect=/dashboard/../2 HTTP/1.1
+Host: api.example.com
+User-Agent: Crowbar/1.0
+Content-Type: application/json
+Content-Length: 35
+
+{"user": "admin", "token": "secret"}
+-------------------------
+--- [Mutant #2] ---
+POST /api/v1/auth/login?redirect=/dashboard HTTP/1.1
+Host: api.example.com
+User-Agent: Crowbar/1.0
+Content-Type: application/json
+Content-Type: application/json
+Content-Length: 35
+
+{"user": "admin", "token": "secret"}
+-------------------------
+--- [Mutant #3] ---
+POST /api/v1/auth/login?redirect=/dashboard HTTP/1.1
+Host: 1e-308
+User-Agent: Crowbar/1.0
+Content-Type: application/json
+Content-Length: 35
+
+{"user": "admin", "token": "secret"}
+```
+
+### 4. Tabular CSV Pipeline Fuzzer (`examples/csv_pipeline_fuzzer.cr`)
+Mutates CSV records while preserving valid tabular syntax (`preserve :csv`). Swaps columns, alters numeric balances, injects boundary values, and verifies outputs against Crystal's `CSV.parse`.
+
+```bash
+crystal run examples/csv_pipeline_fuzzer.cr
+```
+
+**Output:**
+```text
+=== Original CSV Dataset ===
+id,account_name,balance,status
+1001,alice_corp,45000.75,active
+1002,bob_holdings,120.00,pending
+1003,carol_ventures,-500.25,suspended
+1004,david_tech,0.00,active
+============================
+
+=== Generating 4 Mutated CSV Datasets ===
+--- [Mutant #1] ---
+id,account_name,balance,status
+1001,alice_corp,45000.75,active
+1002,bob_holdings,120.00,pending
+1003,carol_ventures,-500.25,suspended,0.0
+1004,david_tech,0.00,active
+
+--> Verified: Valid CSV with 5 rows, 4 columns
+-------------------------
+--- [Mutant #2] ---
+id,id,account_name,balance,status
+1001,1001,alice_corp,45000.75,active
+1002,1002,bob_holdings,120.00,pending
+1003,1003,carol_ventures,-500.25,suspended
+1004,1004,david_tech,0.00,active
+
+--> Verified: Valid CSV with 5 rows, 5 columns
+```
+
+### 5. Binary Telemetry Packet with CRC32 Recalculation (`examples/binary_packet_crc_fuzzer.cr`)
+Simulates wire-protocol fuzzing on a packed binary frame (`[Magic: 2B][MsgType: 1B][Length: 2B][Payload: NB][CRC32: 4B]`). Scopes mutation exclusively to the payload (`scope :payload, bytes: 5...-4`) and uses a `fixup` hook to recalculate both payload length and the IEEE 802.3 CRC32 checksum dynamically.
+
+```bash
+crystal run examples/binary_packet_crc_fuzzer.cr
+```
+
+**Output:**
+```text
+=== Original Telemetry Packet (56 bytes) ===
+Hex: aa5501002f4445564943455f5354415455533a54454d503d32342e35433b46414e3d3132303052504d3b564f4c543d31322e315676f3bc89
+CRC32: 0x76F3BC89
+=========================================================
+
+=== Generating 5 Mutated Packets with Recomputed CRC32 ===
+[1] Size: 394 B | Payload: 385 B | CRC32: 0x9468793C (Verified: true)
+[2] Size: 92 B  | Payload: 83 B  | CRC32: 0xBAEE10CA (Verified: true)
+[3] Size: 64 B  | Payload: 55 B  | CRC32: 0x00D82B6C (Verified: true)
+[4] Size: 70 B  | Payload: 61 B  | CRC32: 0x99C502D1 (Verified: true)
+[5] Size: 56 B  | Payload: 47 B  | CRC32: 0xFE2956CF (Verified: true)
 ```
 
 ---

@@ -45,7 +45,9 @@ jobs:
         run: shards install
 
       - name: Build Carbon Binary
-        run: crystal build lib/carbon/src/carbon/cli.cr -o bin/carbon
+        run: |
+          mkdir -p bin
+          crystal build lib/carbon/src/carbon/cli.cr -o bin/carbon
 
       - name: Verify Version Alignment & Changelog
         run: |
@@ -115,6 +117,9 @@ jobs:
         run: |
           crystal run examples/json_protocol_fuzzer.cr
           crystal run examples/genetic_evolution_demo.cr
+          crystal run examples/http_request_fuzzer.cr
+          crystal run examples/csv_pipeline_fuzzer.cr
+          crystal run examples/binary_packet_crc_fuzzer.cr
 
   # =========================================================================
   # DOCUMENTATION GENERATION & PAGES DEPLOYMENT
@@ -143,6 +148,7 @@ jobs:
 
       - name: Build Jasper Docs
         run: |
+          mkdir -p bin
           crystal build lib/jasper/src/jasper_cli.cr -o bin/jasper
           bin/jasper build
           crystal docs

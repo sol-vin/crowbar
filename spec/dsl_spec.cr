@@ -73,4 +73,71 @@ describe "Crowbar DSL & Pipeline" do
     parsed = CSV.parse(result)
     parsed.size.should be >= 1
   end
+
+  it "configures scoped structure preservation (preserving JSON in body)" do
+    fuzzer = Crowbar.define do
+      seed 42_u64
+      pattern :burst
+
+      scope :body, bytes: 4.. do
+        preserve :json
+      end
+    end
+
+    prefix = "HDR:"
+    json_part = %({"status":"ok","code":200})
+    packet = prefix + json_part
+
+    mutant = fuzzer.fuzz(packet).to_s
+    mutant.should start_with("HDR:") # Prefix untouched
+    mutated_json = mutant[4..]
+    parsed = JSON.parse(mutated_json)
+    parsed.should be_a(JSON::Any)
+  end
+
+  it "configures genetic evolution settings via DSL evolution block" do
+    fuzzer = Crowbar.define do
+      seed 777_u64
+
+      evolution do
+        enabled true
+        population_size 32
+        selection :tournament, size: 5
+        exploration_rate 0.20
+        crossover_rate 0.35
+        stagnation_limit 50
+      end
+    end
+
+    evo = fuzzer.evolution
+    evo.enabled.should be_true
+    evo.corpus.max_size.should eq(32)
+    evo.selection_strategy.should eq(:tournament)
+    evo.tournament_size.should eq(5)
+    evo.exploration_rate.should eq(0.20)
+    evo.crossover_rate.should eq(0.35)
+    evo.stagnation_limit.should eq(50)
+
+    # Test feedback reporting through engine
+    fuzzer.report("candidate_high_score", 100.0)
+    fuzzer.report("candidate_boolean", true)
+    evo.corpus.size.should be >= 2
+  end
+
+  it "configures scope with combined selectors" do
+    fuzzer = Crowbar.define do
+      seed 1337_u64
+
+      selector = Crowbar::Selectors::DelimitedField.new(1, ',') &
+                 Crowbar::Selectors::CharacterClass.new(:digits)
+
+      scope :numeric_column, selector do
+        mutate :byte_flip
+      end
+    end
+
+    csv = "user,12345,active\n"
+    mutant = fuzzer.fuzz(csv).to_s
+    mutant.should_not eq(csv)
+  end
 end

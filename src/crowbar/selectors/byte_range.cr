@@ -19,10 +19,13 @@ module Crowbar::Selectors
     def select(buffer : Buffer) : Array(Tuple(Int32, Int32))
       return [] of Tuple(Int32, Int32) if buffer.empty?
 
-      b = [0, [@begin_index, buffer.size].min].max
+      b = @begin_index < 0 ? buffer.size + @begin_index : @begin_index
+      b = [0, [b, buffer.size].min].max
+
       e = if val = @end_index
-            val -= 1 if @exclusive
-            [b, [val + 1, buffer.size].min].max
+            v = val < 0 ? buffer.size + val : val
+            v -= 1 if @exclusive
+            [b, [v + 1, buffer.size].min].max
           else
             buffer.size
           end

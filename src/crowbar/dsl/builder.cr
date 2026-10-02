@@ -6,14 +6,41 @@ module Crowbar
     getter scope : Scope
 
     def initialize(@scope : Scope)
+      @cleared_defaults = false
     end
 
     def weight(val : Float64)
       @scope.weight = val
     end
 
+    # Enable structure-preserving rules within this scope
+    def preserve(format : Symbol)
+      rule = case format
+             when :json            then Rules::JSONRule.new
+             when :yaml, :yml      then Rules::YAMLRule.new
+             when :http            then Rules::HTTPRule.new
+             when :dns             then Rules::DNSRule.new
+             when :csv, :tsv       then Rules::CSVRule.new
+             when :xml, :html      then Rules::XMLRule.new
+             when :url, :uri       then Rules::URLRule.new
+             when :tlv             then Rules::TLVRule.new
+             when :base64, :b64    then Rules::Base64Rule.new
+             when :varint, :leb128 then Rules::VarintRule.new
+             else                       nil
+             end
+      @scope.add_rule(rule) if rule
+    end
+
+    def preserve_format(format : Symbol)
+      preserve(format)
+    end
+
     # Attach mutators by name
     def mutate(*names : Symbol)
+      unless @cleared_defaults
+        @scope.pool.mutators.clear
+        @cleared_defaults = true
+      end
       names.each do |name|
         case name
         when :byte_drop, :bd                           then @scope.pool.register(Mutators::ByteDrop.new)
