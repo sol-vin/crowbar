@@ -1,6 +1,14 @@
-version: 1.0
+version: 2.0
 shards:
-  perlin_noise:
-    github: redcodefinal/perlin_noise
-    commit: 634a2f0329e142df2f72b84f6cee610851c75b8f
+  carbon:
+    git: https://github.com/sol-vin/carbon.git
+    version: 0.1.9+git.commit.37480c633fb9fde81dc9494ce022d02ae2ced7a3
+
+  jasper:
+    git: https://github.com/sol-vin/jasper.git
+    version: 0.1.0+git.commit.84f01e6ca1cf9bbbd5333faba30a823eddea7cec
+
+  opal:
+    git: https://github.com/sol-vin/opal.git
+    version: 0.1.59+git.commit.977a1c38fdfc4a30177fb6839c1b812475c9b7be
 

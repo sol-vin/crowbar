@@ -1,0 +1,53 @@
+id: OVERVIEW
+title: Getting Started & Crowbar Overview
+summary: Complete introduction to Crowbar 2.0 data transformation and fuzzing architecture.
+track: 01_getting_started
+overview: |
+  Crowbar is a fast, extensible, and pure-Crystal data transformation, structure-preserving
+  mutation, and feedback-driven evolutionary test generation framework.
+
+related_sources:
+  - "shard.yml"
+  - "src/crowbar.cr"
+  - "src/cli.cr"
+
+sections:
+  - id: topic_01_introduction
+    title: Introduction & Architecture
+    summary: Fundamental architectural principles, pipeline modes, and CLI usage.
+    content: |
+      Crowbar operates as both an in-memory transformation library and a high-throughput
+      UNIX streaming filter (`cat input | crowbar > output`).
+
+      | Component | Location | Role |
+      | :--- | :--- | :--- |
+      | Engine | `src/crowbar/engine.cr` | Central pipeline orchestrator |
+      | Mutators | `src/crowbar/mutators/` | Byte, Sequence, Line, Tree, and Value mutators |
+      | Rules | `src/crowbar/rules/` | Syntax-preserving rules for JSON, YAML, HTTP, DNS |
+      | Evolution | `src/crowbar/evolution/` | Genetic algorithm, population corpus, and anti-stagnation |
+      | CLI / TUI | `src/crowbar/cli/` | Opal TrueColor hex diff and streaming CLI |
+
+    options:
+      "-n, --count": "Number of test cases to generate."
+      "-s, --seed": "Deterministic 64-bit random seed."
+      "-o, --output": "Output pattern ('out-%n.bin') or '-' for stdout."
+      "-r, --rule": "Structure-preserving rule (json, yaml, http, dns)."
+      "-d, --diff": "Display Opal TrueColor terminal hex diff."
+
+    examples:
+      - |
+        ```crystal
+        # Instant zero-config black-box fuzzing
+        require "crowbar"
+
+        sample = "Hello World 12345"
+        mutated = Crowbar.fuzz(sample, seed: 42_u64)
+        puts mutated
+        ```
+
+    pitfalls:
+      - "Always provide a deterministic seed if you need exact reproducibility across runs."
+
+    faqs:
+      - q: "How do I build the documentation site?"
+        a: "Run 'bin/jasper build' followed by 'crystal docs'."

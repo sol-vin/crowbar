@@ -1,0 +1,132 @@
+---
+settings:
+  title: CARBON CHANGELOG
+  output_file: CHANGELOG.md
+  categories:
+    breaking:
+      title: "\U0001F4A5 Breaking Changes"
+      bullet: ▲
+    features:
+      title: ✨ Features & Improvements
+      bullet: ✦
+    fixes:
+      title: "\U0001F41B Bug Fixes"
+      bullet: ✓
+    perf:
+      title: ⚡ Performance Optimizations
+      bullet: "\U0001F680"
+    docs:
+      title: "\U0001F4DA Documentation"
+      bullet: "\U0001F4D6"
+    maintenance:
+      title: "\U0001F6E0️ Chores & Tooling"
+      bullet: •
+releases:
+- version: 0.1.14
+  date: "2026-10-01"
+  status: active
+  entries:
+  - type: other
+    description: 1st commit
+    bullet: •
+    hash: 4029cc1
+    author: Ian Rash
+  - type: other
+    description: Readme fix
+    bullet: •
+    hash: 32d3894
+    author: Ian Rash
+  - type: other
+    description: More work, still not functional
+    bullet: •
+    hash: cf3c6f5
+    author: Ian Rash
+  - type: other
+    description: Working now
+    bullet: •
+    hash: b3af601
+    author: Ian Rash
+  - type: other
+    description: Added bytes, float to decimal
+    bullet: •
+    hash: 361c37c
+    author: Ian Rash
+  - type: other
+    description: Add  bytes generator, add string and char generators
+    bullet: •
+    hash: 4ce4497
+    author: Ian Rash
+  - type: other
+    description: Playing with weighting system
+    bullet: •
+    hash: bcca163
+    author: Ian Rash
+  - type: other
+    description: Clean up, fixing read_me
+    bullet: •
+    hash: 735df12
+    author: Ian Rash
+  - type: other
+    description: Fixes to range, regex
+    bullet: •
+    hash: 0e2b6c6
+    author: Ian Rash
+  - type: other
+    description: Added crowbar mutator
+    bullet: •
+    hash: 0d8f467
+    author: Ian Rash
+  - type: other
+    description: Working on xiongmai example fuzzer
+    bullet: •
+    hash: f58e930
+    author: Ian Rash
+  - type: other
+    description: Updated readme
+    bullet: •
+    hash: d869a4e
+    author: Ian Rash
+  - type: other
+    description: Updates
+    bullet: •
+    hash: 973ca85
+    author: Ian Rash
+- version: 0.1.13
+  date: "2026-10-01"
+  status: released
+  entries:
+  - type: breaking
+    description: Total modernization and redesign of Crowbar architecture and DSL,
+      removing obsolete 2019 Perlin noise dependencies
+    bullet: ▲
+    author: Ian Rash
+  - type: feat
+    description: Added structure-preserving rules for JSON, YAML, HTTP/1.x, and RFC
+      1035 DNS wire packets
+    bullet: ✦
+    author: Ian Rash
+  - type: feat
+    description: Added feedback-driven evolutionary optimization with population corpus,
+      tournament selection, crossover recombination, and anti-stagnation loop prevention
+    bullet: ✦
+    author: Ian Rash
+  - type: feat
+    description: Added deterministic fast 64-bit PRNG (Xoshiro256++) seeded for exact
+      test case reproducibility
+    bullet: ✦
+    author: Ian Rash
+  - type: feat
+    description: Added comprehensive Radamsa-inspired mutators across byte, sequence,
+      line, tree, numeric boundary, and Unicode domains
+    bullet: ✦
+    author: Ian Rash
+  - type: feat
+    description: Added standalone UNIX streaming filter CLI with Opal TrueColor hex
+      diff display
+    bullet: ✦
+    author: Ian Rash
+  - type: docs
+    description: Added multi-track Jasper documentation guides and full test suite
+      with 100% pass rate
+    bullet: "\U0001F4D6"
+    author: Ian Rash

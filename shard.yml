@@ -1,19 +1,26 @@
 name: crowbar
-version: 0.0.0.1
+version: 0.1.14
 
 authors:
-  - Ian Rash <ian@0x42424242.in>
+  - Ian Rash <redcodefinal@gmail.com>
+
+description: Fast, extensible data transformation, structure-preserving mutation, and evolutionary test generation engine for Crystal.
+license: MIT
+crystal: ">= 1.20.0"
 
 dependencies:
-  perlin_noise:
-    github: redcodefinal/perlin_noise
+  opal:
+    github: sol-vin/opal
+    branch: main
+
+development_dependencies:
+  carbon:
+    github: sol-vin/carbon
+    branch: main
+  jasper:
+    github: sol-vin/jasper
+    branch: main
 
 targets:
   crowbar:
-    main: src/crowbar.cr
-  sandbox:
-    main: src/sandbox.cr
-
-crystal: 0.27.2
-
-license: MIT
+    main: src/cli.cr

@@ -1,0 +1,43 @@
+id: EVOLUTION_GUIDE
+title: Feedback-Driven Evolutionary Optimization
+summary: Guide to the genetic algorithm, population corpus, and anti-stagnation mechanisms.
+track: 01_getting_started
+overview: |
+  Crowbar enables programs to report candidate execution feedback (success/fitness)
+  to evolve inputs toward maximizing coverage, depth, or custom test goals.
+
+related_sources:
+  - "src/crowbar/evolution/manager.cr"
+  - "src/crowbar/evolution/corpus.cr"
+
+sections:
+  - id: topic_01_evolution_mechanics
+    title: Genetic Algorithms and Diversity Controls
+    summary: Population selection, crossover, and preventing local locking.
+    content: |
+      | Parameter | Default | Purpose |
+      | :--- | :--- | :--- |
+      | `enabled` | `true` | Toggle evolutionary mode on/off |
+      | `population_size` | `64` | Maximum candidates preserved in memory |
+      | `exploration_rate` | `0.15` | Percentage of forced random baseline inputs |
+      | `crossover_rate` | `0.25` | Percentage of hybrid offspring recombination |
+      | `stagnation_limit` | `100` | Stagnant cycles before novelty culling |
+
+    examples:
+      - |
+        ```crystal
+        fuzzer = Crowbar.define do
+          evolution do
+            enabled true
+            population_size 32
+            exploration_rate 0.15
+          end
+        end
+
+        1000.times do
+          candidate = fuzzer.fuzz(baseline)
+          # Evaluate candidate in target program
+          fitness_score = evaluate(candidate)
+          fuzzer.report(candidate, fitness: fitness_score)
+        end
+        ```

@@ -1,0 +1,54 @@
+id: DSL_GUIDE
+title: Declarative DSL & Scoped Pipelines
+summary: In-depth tutorial on composing targeted pipelines, scopes, and fixup hooks.
+track: 01_getting_started
+overview: |
+  Crowbar provides an expressive block-based DSL to pinpoint specific regions of data,
+  attach weighted mutators, and calculate post-transform checksums or lengths.
+
+related_sources:
+  - "src/crowbar/dsl/builder.cr"
+  - "src/crowbar/selectors/base.cr"
+
+sections:
+  - id: topic_01_scopes_and_fixups
+    title: Scopes, Matchers, and Fixup Hooks
+    summary: Scoping byte ranges, regex captures, and repairing headers with fixups.
+    content: |
+      Using `Crowbar.define`, you can isolate portions of an input payload:
+
+      | Directive | Syntax | Description |
+      | :--- | :--- | :--- |
+      | `seed` | `seed 1234_u64` | Configures the deterministic PRNG |
+      | `pattern` | `pattern :burst` | Sets frequency (:once, :many, :burst) |
+      | `scope` | `scope :header, bytes: 0...16` | Constrains mutation to a byte range |
+      | `match` | `match /"([^"]+)"/, group: 1` | Targets regex match groups |
+      | `fixup` | `fixup do \|buf\| ... end` | Post-mutation callback for checksums |
+
+    examples:
+      - |
+        ```crystal
+        fuzzer = Crowbar.define do
+          seed 0x1337_u64
+          pattern :many
+
+          # Scope 1: Protect and mutate header
+          scope :header, bytes: 0...16 do
+            weight 0.2
+            mutate :byte_flip, :byte_swap
+          end
+
+          # Scope 2: Mutate payload
+          scope :payload, bytes: 16.. do
+            weight 0.8
+            mutate :boundary_number, :unicode
+          end
+
+          # Fixup: recalculate payload length
+          fixup do |buffer|
+            next if buffer.size < 16
+            len = (buffer.size - 16).to_u32
+            IO::ByteFormat::BigEndian.encode(len, buffer[0, 4])
+          end
+        end
+        ```
