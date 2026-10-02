@@ -1,4 +1,25 @@
 # CARBON CHANGELOG
+## [0.1.16] - 2026-10-01
+### ✨ Features & Improvements
+- ✦ complete overhaul of Crowbar into modern data transformation, structure-preserving mutation, and evolutionary testing framework (`f27db55`)
+- ✦ expand to 10 structure rules, 7 new selectors with combinators, and 9 mutator families (`a860ab0`)
+
+### 🛠️ Chores & Tooling
+- • 1st commit (`4029cc1`)
+- • Readme fix (`32d3894`)
+- • More work, still not functional (`cf3c6f5`)
+- • Working now (`b3af601`)
+- • Added bytes, float to decimal (`361c37c`)
+- • Add  bytes generator, add string and char generators (`4ce4497`)
+- • Playing with weighting system (`bcca163`)
+- • Clean up, fixing read_me (`735df12`)
+- • Fixes to range, regex (`0e2b6c6`)
+- • Added crowbar mutator (`0d8f467`)
+- • Working on xiongmai example fuzzer (`f58e930`)
+- • Updated readme (`d869a4e`)
+- • Updates (`973ca85`)
+
+---
 ## [0.1.15] - 2026-10-01
 ### ✨ Features & Improvements
 - ✦ complete overhaul of Crowbar into modern data transformation, structure-preserving mutation, and evolutionary testing framework (`f27db55`)
