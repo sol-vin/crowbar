@@ -14,6 +14,18 @@ require "./diff"
       lpBytesLeftThisMessage : DWORD*,
     ) : BOOL
   end
+{% else %}
+  lib LibC
+    POLLIN = 0x0001_i16
+
+    struct PollFD
+      fd : Int32
+      events : Int16
+      revents : Int16
+    end
+
+    fun opal_poll = poll(fds : Void*, nfds : UInt64, timeout : Int32) : Int32
+  end
 {% end %}
 
 module Crowbar::CLI
