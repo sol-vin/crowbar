@@ -14,6 +14,16 @@ require "./diff"
       lpBytesLeftThisMessage : DWORD*,
     ) : BOOL
   end
+{% else %}
+  lib LibC
+    struct Pollfd
+      fd : Int32
+      events : Int16
+      revents : Int16
+    end
+
+    fun poll(fds : Pollfd*, nfds : SizeT, timeout : Int32) : Int32
+  end
 {% end %}
 
 module Crowbar::CLI
@@ -317,10 +327,19 @@ module Crowbar::CLI
         if LibC.PeekNamedPipe(h, nil, 0, nil, out avail, nil) != 0
           return avail > 0
         end
-        false
+        begin
+          return STDIN.info.file? && STDIN.info.size > 0
+        rescue
+          false
+        end
       {% else %}
-        selected = IO.select([STDIN], timeout: 0.seconds)
-        !selected.nil? && !selected.empty?
+        begin
+          return true if STDIN.info.file? && STDIN.info.size > 0
+        rescue
+        end
+        pfd = LibC::Pollfd.new(fd: STDIN.fd, events: 0x0001_i16, revents: 0_i16)
+        res = LibC.poll(pointerof(pfd), 1_u64, 50)
+        res > 0 && ((pfd.revents & 0x0001_i16) != 0)
       {% end %}
     rescue
       false
