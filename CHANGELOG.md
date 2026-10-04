@@ -16,6 +16,7 @@
 ### 📚 Documentation
 - 📖 add crowbar.gif banner and update component tables in README (`3eae1a6`)
 - 📖 **[CHANGELOG]** record end-to-end CLI integration specs (`57208bb`)
+- 📖 **[CHANGELOG]** record end-to-end CLI integration specs (`28f45e8`)
 
 ### 🛠️ Chores & Tooling
 - • 1st commit (`4029cc1`)
@@ -50,6 +51,7 @@
 ### 📚 Documentation
 - 📖 add crowbar.gif banner and update component tables in README (`3eae1a6`)
 - 📖 **[CHANGELOG]** record end-to-end CLI integration specs (`57208bb`)
+- 📖 **[CHANGELOG]** record end-to-end CLI integration specs (`28f45e8`)
 
 ### 🛠️ Chores & Tooling
 - • 1st commit (`4029cc1`)

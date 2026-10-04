@@ -157,6 +157,12 @@ releases:
     badge: '[CHANGELOG]'
     hash: 57208bb
     author: Ian Rash
+  - type: docs
+    description: record end-to-end CLI integration specs
+    bullet: "\U0001F4D6"
+    badge: '[CHANGELOG]'
+    hash: 28f45e8
+    author: Ian Rash
 - version: 0.1.24
   date: "2026-10-04"
   status: released
@@ -291,6 +297,12 @@ releases:
     bullet: "\U0001F4D6"
     badge: '[CHANGELOG]'
     hash: 57208bb
+    author: Ian Rash
+  - type: docs
+    description: record end-to-end CLI integration specs
+    bullet: "\U0001F4D6"
+    badge: '[CHANGELOG]'
+    hash: 28f45e8
     author: Ian Rash
 - version: 0.1.23
   date: "2026-10-04"
