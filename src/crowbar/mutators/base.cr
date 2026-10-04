@@ -15,6 +15,11 @@ module Crowbar
     abstract def name : String
     abstract def description : String
 
+    # Optional short aliases or alternative identifiers (e.g. ["fuse", "ft", "fn"])
+    def aliases : Array(String)
+      [] of String
+    end
+
     # Performs mutation on buffer, optionally constrained to target_range [start, end_exclusive].
     # Returns a tuple of {success : Bool, score_delta : Int32}.
     # score_delta > 0 indicates success in an appropriate domain (+1 or +2).

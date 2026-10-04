@@ -9,6 +9,8 @@ require "./arithmetic"
 require "./text"
 require "./layout"
 require "./stress"
+require "./splice"
+require "./security"
 require "../evolution/bandit"
 
 module Crowbar
@@ -82,11 +84,16 @@ module Crowbar
       register(Mutators::LengthBoundary.new)
       register(Mutators::FloatAnomalies.new)
       register(Mutators::DelimiterStress.new)
+
+      # Sequence Splicing & Parser Boundary Validation
+      register(Mutators::Splice.new)
+      register(Mutators::Security.new)
     end
 
-    # Finds mutator by short or full name
+    # Finds mutator by short or full name or alias
     def find?(name : String) : Mutator?
-      @mutators.find { |m| m.name == name }
+      clean = name.strip.downcase
+      @mutators.find { |m| m.name.downcase == clean || m.aliases.map(&.downcase).includes?(clean) }
     end
 
     # Selects a mutator based on weighted distribution or UCB1 bandit score

@@ -50,8 +50,8 @@ describe "Crowbar CLI & HexDiff" do
 
     it "filters mutator pool according to CLI mutator selections" do
       engine = Crowbar::Engine.new(1234_u64)
-      # Default pool contains all 34 mutators
-      engine.pool.mutators.size.should eq(34)
+      # Default pool contains all 36 mutators
+      engine.pool.mutators.size.should eq(36)
 
       # Filter down to specific list (as done by CLI -m bd,bf)
       engine.pool.mutators.clear

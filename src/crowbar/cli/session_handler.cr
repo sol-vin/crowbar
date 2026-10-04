@@ -22,6 +22,10 @@ module Crowbar::CLI
     property show_diff : Bool
     property output_pattern : String?
     property json_output : Bool
+    property template : String?
+    property unique : Bool
+    property checksums_capacity : Int32?
+    property seek_offset : Int64?
 
     def initialize(
       @in_io : IO,
@@ -35,6 +39,10 @@ module Crowbar::CLI
       @show_diff : Bool = false,
       @output_pattern : String? = nil,
       @json_output : Bool = false,
+      @template : String? = nil,
+      @unique : Bool = false,
+      @checksums_capacity : Int32? = nil,
+      @seek_offset : Int64? = nil,
     )
     end
 
@@ -87,7 +95,8 @@ module Crowbar::CLI
       action = sub_args[1]
       case action
       when "next"
-        handle_session_next(session_id)
+        next_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
+        handle_session_next(session_id, next_flags)
       when "reward"
         reward_val = sub_args.size > 2 ? sub_args[2] : nil
         handle_session_reward(session_id, reward_val)
@@ -124,7 +133,7 @@ module Crowbar::CLI
       nil
     end
 
-    private def handle_session_next(session_id : String)
+    private def handle_session_next(session_id : String, sub_flags : Array(String) = [] of String)
       piped = read_piped_stdin
       session = if Session.exists?(session_id)
                   sess = Session.load(session_id).not_nil!
@@ -144,11 +153,73 @@ module Crowbar::CLI
                   Session.load_or_create(session_id, piped, @selected_rule, @selected_pattern, @selected_mutations, @seed)
                 end
 
-      mutated = session.next_mutant
+      req_unique = @unique
+      req_seek = @seek_offset
+      req_template = @template
+      out_pattern = @output_pattern
+      diff_mode = @show_diff
 
-      if @show_diff
+      i = 0
+      while i < sub_flags.size
+        arg = sub_flags[i]
+        case arg
+        when "-t", "--template"
+          if i + 1 < sub_flags.size
+            req_template = sub_flags[i + 1]
+            i += 2
+          else
+            i += 1
+          end
+        when "-u", "--unique"
+          req_unique = true
+          i += 1
+        when "-S", "--seek"
+          if i + 1 < sub_flags.size
+            req_seek = sub_flags[i + 1].to_i64?
+            i += 2
+          else
+            i += 1
+          end
+        when "-C", "--checksums"
+          if i + 1 < sub_flags.size
+            if cap = sub_flags[i + 1].to_i?
+              session.uniqueness_capacity = cap
+            end
+            i += 2
+          else
+            i += 1
+          end
+        when "-d", "--diff"
+          diff_mode = true
+          i += 1
+        when "-o", "--output"
+          if i + 1 < sub_flags.size
+            out_pattern = sub_flags[i + 1]
+            i += 2
+          else
+            i += 1
+          end
+        when "-m", "--mutations"
+          if i + 1 < sub_flags.size
+            session.set_mutators(sub_flags[i + 1].split(","))
+            i += 2
+          else
+            i += 1
+          end
+        else
+          i += 1
+        end
+      end
+
+      mutated = session.next_mutant(
+        unique: req_unique ? true : nil,
+        seek: req_seek,
+        template_override: req_template
+      )
+
+      if diff_mode
         HexDiff.render(session.baseline, mutated, @out_io)
-      elsif pattern = @output_pattern
+      elsif pattern = out_pattern
         if pattern == "-"
           @out_io.write(mutated.to_slice)
         else
@@ -292,6 +363,11 @@ module Crowbar::CLI
               "weight"        => sc.weight,
             }
           end,
+          "template"            => session.template,
+          "unique_enabled"      => session.unique_enabled,
+          "uniqueness_capacity" => session.uniqueness_capacity,
+          "seen_hashes_count"   => session.seen_hashes.size,
+          "seek_offset"         => session.seek_offset,
         }
         puts data.to_pretty_json
         return
@@ -309,6 +385,13 @@ module Crowbar::CLI
       puts "#{label_style.render("Rules:")}     #{rules_str}"
       puts "#{label_style.render("Pattern:")}   #{session.pattern_name || "many (default)"}"
       puts "#{label_style.render("Mutators:")}  #{session.selected_mutations || "all mutators active"}"
+      tmpl_str = session.template ? session.template.not_nil! : "none"
+      puts "#{label_style.render("Template:")}  #{tmpl_str}"
+      uniq_str = session.unique_enabled ? "enabled (capacity: #{session.uniqueness_capacity}, seen: #{session.seen_hashes.size})" : "disabled"
+      puts "#{label_style.render("Unique Filter:")} #{uniq_str}"
+      if session.seek_offset != 0
+        puts "#{label_style.render("Seek Offset:")}   #{session.seek_offset}"
+      end
       if !session.scopes.empty?
         puts "#{label_style.render("Scopes:")}    #{session.scopes.size} configured"
         session.scopes.each do |sc|
@@ -375,7 +458,7 @@ module Crowbar::CLI
         return
       end
 
-      if sub_args.empty? && @selected_rule.nil? && @selected_pattern.nil? && @selected_mutations.nil?
+      if sub_args.empty? && @selected_rule.nil? && @selected_pattern.nil? && @selected_mutations.nil? && @template.nil? && !@unique && @seek_offset.nil? && @checksums_capacity.nil?
         display_session_setup_status(session)
         return
       end
@@ -399,6 +482,30 @@ module Crowbar::CLI
       if pat = @selected_pattern
         session.pattern_name = pat
         puts Opal.style.fg(:green).render("Set pattern to #{pat} for session #{session_id}")
+        modified = true
+      end
+
+      if t = @template
+        session.set_template(t)
+        puts Opal.style.fg(:green).render("Set template to '#{t}' for session #{session_id}")
+        modified = true
+      end
+
+      if @unique
+        session.set_unique(true)
+        puts Opal.style.fg(:green).render("Enabled uniqueness deduplication filter for session #{session_id}")
+        modified = true
+      end
+
+      if cap = @checksums_capacity
+        session.uniqueness_capacity = cap
+        puts Opal.style.fg(:green).render("Set uniqueness checksums capacity to #{cap} for session #{session_id}")
+        modified = true
+      end
+
+      if s = @seek_offset
+        session.set_seek(s)
+        puts Opal.style.fg(:green).render("Set seek offset to #{s} for session #{session_id}")
         modified = true
       end
 
@@ -476,6 +583,56 @@ module Crowbar::CLI
         when "--reset-mutators"
           session.reset_mutators
           puts Opal.style.fg(:yellow).render("Reset mutator pool to default (all mutators) for session #{session_id}")
+          modified = true
+          i += 1
+        when "--template", "-t"
+          if i + 1 < sub_args.size
+            t_spec = sub_args[i + 1]
+            session.set_template(t_spec)
+            puts Opal.style.fg(:green).render("Set template to '#{t_spec}' for session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--remove-template", "--clear-template"
+          session.set_template(nil)
+          puts Opal.style.fg(:yellow).render("Removed template from session #{session_id}")
+          modified = true
+          i += 1
+        when "--unique", "-u"
+          session.set_unique(true)
+          puts Opal.style.fg(:green).render("Enabled uniqueness deduplication filter for session #{session_id}")
+          modified = true
+          i += 1
+        when "--no-unique", "--disable-unique"
+          session.set_unique(false)
+          puts Opal.style.fg(:yellow).render("Disabled uniqueness deduplication filter for session #{session_id}")
+          modified = true
+          i += 1
+        when "--checksums", "-C"
+          if i + 1 < sub_args.size
+            c_val = sub_args[i + 1].to_i? || 10_000
+            session.uniqueness_capacity = c_val
+            puts Opal.style.fg(:green).render("Set uniqueness checksums capacity to #{c_val} for session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--seek", "-S"
+          if i + 1 < sub_args.size
+            s_val = sub_args[i + 1].to_i64? || 0_i64
+            session.set_seek(s_val)
+            puts Opal.style.fg(:green).render("Set seek offset to #{s_val} for session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--clear-checksums", "--clear-seen"
+          session.clear_seen_hashes
+          puts Opal.style.fg(:yellow).render("Cleared uniqueness seen hashes for session #{session_id}")
           modified = true
           i += 1
         when "--pattern", "-p"
@@ -570,6 +727,13 @@ module Crowbar::CLI
       puts "#{label_style.render("Active Rules:")}    #{rules_str}"
       puts "#{label_style.render("Pattern:")}         #{session.pattern_name || "many (default)"}"
       puts "#{label_style.render("Mutator Filter:")}  #{session.selected_mutations || "all mutators active"}"
+      tmpl_str = session.template ? session.template.not_nil! : "none"
+      puts "#{label_style.render("Template:")}        #{tmpl_str}"
+      uniq_str = session.unique_enabled ? "enabled (capacity: #{session.uniqueness_capacity}, seen: #{session.seen_hashes.size})" : "disabled"
+      puts "#{label_style.render("Unique Filter:")}   #{uniq_str}"
+      if session.seek_offset != 0
+        puts "#{label_style.render("Seek Offset:")}     #{session.seek_offset}"
+      end
       if session.scopes.empty?
         puts "#{label_style.render("Scopes:")}          None (whole buffer mutation)"
       else
@@ -587,9 +751,10 @@ module Crowbar::CLI
       puts "\nUsage: crowbar session <id> <action> [options]"
       puts ""
       puts "Actions:"
-      puts "  next              Generate the next mutated item from session baseline"
+      puts "  next [flags]      Generate the next mutated item from session baseline"
+      puts "                    Flags: -t/--template, -u/--unique, -S/--seek, -d/--diff, -o/--output"
       puts "  reward <val>      Provide feedback (-1.0 to 1.0) on the last generated mutant"
-      puts "  setup [options]   Configure active rules, mutator pools, patterns, and scopes"
+      puts "  setup [options]   Configure active rules, mutators, templates, uniqueness, scopes"
       puts "  show [opts]       Print session baseline or latest mutant (--baseline, --mutant)"
       puts "  history [opts]    Display event history timeline (--limit N, --json)"
       puts "  reset             Reset and delete the session"
@@ -600,11 +765,13 @@ module Crowbar::CLI
       puts "  1. Initialize with input:  \"POST / HTTP/1.1\\r\\n\\r\\n\" | crowbar session 1 next"
       puts "  2. Reward feedback:        crowbar session 1 reward 0.5   (or -0.5)"
       puts "  3. Generate next:          crowbar session 1 next > out.txt"
-      puts "  4. Show current mutant:    crowbar session 1 show --mutant"
-      puts "  5. View event history:     crowbar session 1 history --limit 10"
-      puts "  6. Configure session:      crowbar session 1 setup --add-rule mp3 --set-mutators num,bf"
-      puts "  7. Reset session:          crowbar session 1 reset"
-      puts "  8. Reset via new input:    \"NEW INPUT\" | crowbar session 1 next"
+      puts "  4. Templated generation:   crowbar session 1 next -t \"PREFIX %f SUFFIX\""
+      puts "  5. Unique deduplication:   crowbar session 1 next --unique"
+      puts "  6. Show current mutant:    crowbar session 1 show --mutant"
+      puts "  7. View event history:     crowbar session 1 history --limit 10"
+      puts "  8. Configure session:      crowbar session 1 setup --add-rule mp3 --add-mutator sec --unique"
+      puts "  9. Reset session:          crowbar session 1 reset"
+      puts " 10. Reset via new input:    \"NEW INPUT\" | crowbar session 1 next"
     end
 
     private def print_setup_help
@@ -617,8 +784,17 @@ module Crowbar::CLI
       puts "  --remove-rule <name>      Remove an active rule"
       puts "  --clear-rules             Clear all active rules"
       puts "  --auto-rule               Auto-detect rule from session baseline payload"
+      puts "  --add-mutator <m>         Add mutator to pool (e.g. sec, fuse, splice, ab, num, bf)"
+      puts "  --remove-mutator <m>      Remove mutator from pool"
       puts "  --set-mutators <m1,m2>    Restrict mutator pool to comma-separated list"
       puts "  --reset-mutators          Restore default full mutator pool"
+      puts "  --template, -t <spec>     Set output wrapper template ('%f' or '{{data}}' placeholder)"
+      puts "  --remove-template         Clear output template"
+      puts "  --unique, -u              Enable deduplication uniqueness filter"
+      puts "  --no-unique               Disable deduplication uniqueness filter"
+      puts "  --checksums, -C <N>       Set uniqueness ring buffer capacity (default: 10,000)"
+      puts "  --seek, -S <offset>       Set PRNG fast-forward seek offset"
+      puts "  --clear-checksums         Clear uniqueness seen hashes ring buffer"
       puts "  --pattern, -p <pattern>   Set execution pattern (many, burst, once)"
       puts "  --add-scope <name>        Add named targeting scope"
       puts "  --selector, -s <type>     Selector type (range, header, footer, field, chars, stride, entropy, regex)"

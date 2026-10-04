@@ -166,6 +166,8 @@ module Crowbar
         when :length_boundary, :len                    then @scope.pool.register(Mutators::LengthBoundary.new)
         when :float_anomalies, :flt                    then @scope.pool.register(Mutators::FloatAnomalies.new)
         when :delimiter_stress, :delim                 then @scope.pool.register(Mutators::DelimiterStress.new)
+        when :splice, :fuse, :ft, :fn                  then @scope.pool.register(Mutators::Splice.new)
+        when :security, :sec, :ab, :bad_ascii          then @scope.pool.register(Mutators::Security.new)
         else
           # Allow string lookup
           if m = @scope.pool.find?(name.to_s)
@@ -249,6 +251,26 @@ module Crowbar
                         when :burst, :bu then Patterns::Burst.new
                         else                  Patterns::Many.new
                         end
+    end
+
+    # Configure output envelope / template
+    def template(spec : String)
+      @engine.template = spec
+    end
+
+    # Configure deduplication uniqueness filter
+    def unique(capacity : Int32 = 10_000)
+      @engine.uniqueness_filter = Evolution::UniquenessFilter.new(capacity)
+    end
+
+    # Fast-forwards PRNG state by offset
+    def seek(offset : Int)
+      @engine.seek(offset)
+    end
+
+    # Add secondary sample for inter-sample splicing
+    def add_sample(sample : Buffer | Bytes | String)
+      @engine.add_sample(sample)
     end
 
     private def create_rule(format : Symbol) : Rule?

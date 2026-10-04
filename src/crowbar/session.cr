@@ -101,6 +101,16 @@ module Crowbar
     property history : Array(HistoryEntry)
     @[JSON::Field(emit_null: false)]
     property scopes : Array(ScopeConfig) = [] of ScopeConfig
+    @[JSON::Field(emit_null: false)]
+    property template : String? = nil
+    @[JSON::Field(emit_null: false)]
+    property unique_enabled : Bool = false
+    @[JSON::Field(emit_null: false)]
+    property uniqueness_capacity : Int32 = 10_000
+    @[JSON::Field(emit_null: false)]
+    property seen_hashes : Array(UInt64) = [] of UInt64
+    @[JSON::Field(emit_null: false)]
+    property seek_offset : Int64 = 0_i64
 
     def initialize(
       @id : String,
@@ -243,11 +253,21 @@ module Crowbar
 
     # Builds and re-hydrates an Engine instance with stored session state
     def build_engine : Engine
-      current_seed = @seed &+ @iteration.to_u64
+      current_seed = @seed &+ @iteration.to_u64 &+ @seek_offset.to_u64
       engine = Engine.new(current_seed)
       engine.evolution.enabled = true
       engine.pool.bandit = engine.evolution.bandit
       engine.pool.use_bandit = true
+
+      # Restore template configuration
+      engine.template = @template if @template
+
+      # Restore uniqueness filter
+      if @unique_enabled
+        filter = Evolution::UniquenessFilter.new(@uniqueness_capacity)
+        filter.load_hashes(@seen_hashes)
+        engine.uniqueness_filter = filter
+      end
 
       # Restore pattern
       if pat = @pattern_name
@@ -359,19 +379,50 @@ module Crowbar
           coverage_hash: c_state.coverage_hash
         )
         engine.evolution.corpus.add(cand)
+        # Register as secondary sample for sequence splicing
+        engine.context.add_sample(cand_buf)
       end
 
       engine
     end
 
-    # Generates the next mutant, updates session iteration, syncs bandit & corpus, and saves state
-    def next_mutant(dir : String = Session.default_dir) : Buffer
+    # Generates the next mutant, updates session iteration, syncs bandit & corpus, and saves state.
+    # Optionally accepts runtime overrides for uniqueness deduplication, PRNG seek, and output templating.
+    def next_mutant(
+      dir : String = Session.default_dir,
+      unique : Bool? = nil,
+      seek : Int64? = nil,
+      template_override : String? = nil,
+    ) : Buffer
+      @seek_offset += seek if seek
+      if t = template_override
+        @template = t
+      end
+      effective_template = @template
+      if unique == true
+        @unique_enabled = true
+      end
+
       engine = build_engine
+      engine.template = effective_template if effective_template
+
+      # Ensure uniqueness filter is attached if requested via parameter
+      if unique == true && engine.uniqueness_filter.nil?
+        filter = Evolution::UniquenessFilter.new(@uniqueness_capacity)
+        filter.load_hashes(@seen_hashes)
+        engine.uniqueness_filter = filter
+      end
+
       mutated = engine.transform(baseline)
 
       @iteration += 1
       self.last_mutant = mutated
       @last_mutators = engine.evolution.last_applied_mutators.dup
+
+      # Sync uniqueness hashes back to session
+      if filter = engine.uniqueness_filter
+        @seen_hashes = filter.to_a
+      end
 
       # Sync Bandit weights back to session
       @total_pulls = engine.evolution.bandit.total_pulls
@@ -533,6 +584,31 @@ module Crowbar
 
     def clear_scopes : self
       @scopes.clear
+      @updated_at = Time.utc
+      self
+    end
+
+    def set_template(spec : String?) : self
+      @template = spec.nil? || spec.empty? ? nil : spec
+      @updated_at = Time.utc
+      self
+    end
+
+    def set_unique(enabled : Bool, capacity : Int32 = 10_000) : self
+      @unique_enabled = enabled
+      @uniqueness_capacity = capacity
+      @updated_at = Time.utc
+      self
+    end
+
+    def set_seek(offset : Int64) : self
+      @seek_offset = offset
+      @updated_at = Time.utc
+      self
+    end
+
+    def clear_seen_hashes : self
+      @seen_hashes.clear
       @updated_at = Time.utc
       self
     end

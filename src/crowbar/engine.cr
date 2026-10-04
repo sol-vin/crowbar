@@ -6,6 +6,8 @@ require "./selectors/base"
 require "./rules/registry"
 require "./rules/detector"
 require "./evolution/manager"
+require "./evolution/uniqueness_filter"
+require "./template"
 require "./dsl/frame_builder"
 require "./dsl/grammar_builder"
 
@@ -40,6 +42,8 @@ module Crowbar
     getter fixups : Array(Proc(Buffer, Nil))
     getter frames : Hash(String, FrameDefinition)
     getter grammars : Hash(String, GrammarDefinition)
+    property uniqueness_filter : Evolution::UniquenessFilter?
+    property template : String?
 
     def initialize(seed : UInt64 = PRNG.default_seed)
       @context = Context.new(seed)
@@ -52,6 +56,21 @@ module Crowbar
       @fixups = [] of Proc(Buffer, Nil)
       @frames = Hash(String, FrameDefinition).new
       @grammars = Hash(String, GrammarDefinition).new
+      @uniqueness_filter = nil
+      @template = nil
+    end
+
+    def add_sample(sample : Buffer | Bytes | String) : Nil
+      buf = case sample
+            when Buffer then sample
+            when Bytes  then Buffer.new(sample)
+            else             Buffer.new(sample.to_s)
+            end
+      @context.add_sample(buf)
+    end
+
+    def seek(offset : Int) : Nil
+      @context.seek(offset)
     end
 
     def seed : UInt64
@@ -157,6 +176,41 @@ module Crowbar
                  else             Buffer.new(input.to_s)
                  end
 
+      if filter = @uniqueness_filter
+        # Deduplication retry loop: generate until unique or retry limit reached
+        max_retries = 20
+        candidate = Buffer.new
+        max_retries.times do
+          candidate = mutate_internal(baseline)
+          rendered = if t = @template
+                       Template.render(t, candidate)
+                     else
+                       candidate
+                     end
+          if filter.filter(rendered)
+            return rendered
+          end
+        end
+
+        # Fallback if max retries exceeded
+        rendered = if t = @template
+                     Template.render(t, candidate)
+                   else
+                     candidate
+                   end
+        filter.add(rendered)
+        rendered
+      else
+        candidate = mutate_internal(baseline)
+        if t = @template
+          Template.render(t, candidate)
+        else
+          candidate
+        end
+      end
+    end
+
+    private def mutate_internal(baseline : Buffer) : Buffer
       meta = @context.begin_iteration(baseline.size)
 
       # 1. Evolve: Select parent buffer (baseline or high-fitness candidate)

@@ -61,6 +61,12 @@ module Crowbar
       result
     end
 
+    # Fast-forwards PRNG state by `offset` iterations
+    def seek(offset : Int) : Nil
+      return if offset <= 0
+      offset.to_i64.times { next_u64 }
+    end
+
     private def rotl(x : UInt64, k : Int32) : UInt64
       (x << k) | (x >> (64 - k))
     end

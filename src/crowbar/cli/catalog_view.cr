@@ -28,6 +28,7 @@ module Crowbar::CLI
             {
               "name"        => m.name,
               "description" => m.description,
+              "aliases"     => m.aliases,
             }
           end,
         }
@@ -67,7 +68,8 @@ module Crowbar::CLI
       pool = MutatorPool.new
       io.puts category_style.render("Mutators (#{pool.mutators.size} Total):")
       pool.mutators.each do |m|
-        io.puts sprintf("  %-10s %s", name_style.render(m.name), dim_style.render(m.description))
+        alias_info = m.aliases.empty? ? "" : " (aliases: #{m.aliases.join(", ")})"
+        io.puts sprintf("  %-10s %s%s", name_style.render(m.name), dim_style.render(m.description), dim_style.render(alias_info))
       end
       io.puts ""
 
@@ -123,6 +125,7 @@ module Crowbar::CLI
           {
             "name"        => m.name,
             "description" => m.description,
+            "aliases"     => m.aliases,
           }
         end
         io.puts data.to_pretty_json
@@ -136,7 +139,8 @@ module Crowbar::CLI
       io.puts title_style.render("Available Mutators:")
       pool = MutatorPool.new
       pool.mutators.each do |m|
-        io.puts sprintf("  %-10s %s", name_style.render(m.name), dim_style.render(m.description))
+        alias_info = m.aliases.empty? ? "" : " (aliases: #{m.aliases.join(", ")})"
+        io.puts sprintf("  %-10s %s%s", name_style.render(m.name), dim_style.render(m.description), dim_style.render(alias_info))
       end
     end
   end

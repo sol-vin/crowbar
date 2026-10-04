@@ -35,6 +35,10 @@ module Crowbar::CLI
     @show_diff : Bool = false
     @auto_detect : Bool = false
     @json_output : Bool = false
+    @template : String? = nil
+    @unique : Bool = false
+    @checksums_capacity : Int32? = nil
+    @seek_offset : Int64? = nil
     @input_files : Array(String) = [] of String
 
     def initialize(
@@ -81,6 +85,10 @@ module Crowbar::CLI
           show_diff: @show_diff,
           output_pattern: @output_pattern,
           json_output: @json_output,
+          template: @template,
+          unique: @unique,
+          checksums_capacity: @checksums_capacity,
+          seek_offset: @seek_offset,
         )
         session_idx = remaining.index("session").not_nil!
         sub_args = remaining[(session_idx + 1)..]
@@ -127,6 +135,22 @@ module Crowbar::CLI
 
         opts.on("--auto", "Auto-detect input format from magic bytes and attach matching rule") do
           @auto_detect = true
+        end
+
+        opts.on("-t TEMPLATE", "--template TEMPLATE", "Output wrapper template ('%f' or '{{data}}' placeholder)") do |t|
+          @template = t
+        end
+
+        opts.on("-u", "--unique", "Deduplicate test cases using LRU checksum filter") do
+          @unique = true
+        end
+
+        opts.on("-C COUNT", "--checksums COUNT", "Capacity of uniqueness deduplication filter (default: 10000)") do |c|
+          @checksums_capacity = c.to_i
+        end
+
+        opts.on("-S OFFSET", "--seek OFFSET", "Fast-forward PRNG state by OFFSET iterations") do |s|
+          @seek_offset = s.to_i64
         end
 
         opts.on("-d", "--diff", "Display Opal TrueColor terminal hex diff") do
@@ -211,6 +235,30 @@ module Crowbar::CLI
         names.each do |n|
           if m = pool.find?(n)
             engine.pool.register(m)
+          end
+        end
+      end
+
+      # Apply output template if requested
+      engine.template = @template if @template
+
+      # Apply uniqueness filter if requested
+      if cap = @checksums_capacity
+        engine.uniqueness_filter = Evolution::UniquenessFilter.new(cap)
+      elsif @unique
+        engine.uniqueness_filter = Evolution::UniquenessFilter.new(10_000)
+      end
+
+      # Fast-forward PRNG state if seek offset provided
+      if off = @seek_offset
+        engine.seek(off)
+      end
+
+      # Load additional input files as secondary samples for sequence splicing (Radamsa multi-sample splicing)
+      if @input_files.size > 1
+        @input_files[1..].each do |secondary_file|
+          if File.exists?(secondary_file)
+            engine.add_sample(Buffer.new(File.read(secondary_file)))
           end
         end
       end
@@ -305,6 +353,28 @@ module Crowbar::CLI
         when "-o", "--output"
           if i + 1 < args.size
             @output_pattern = args[i + 1]
+            i += 2
+            next
+          end
+        when "-t", "--template"
+          if i + 1 < args.size
+            @template = args[i + 1]
+            i += 2
+            next
+          end
+        when "-u", "--unique"
+          @unique = true
+          i += 1
+          next
+        when "-C", "--checksums"
+          if i + 1 < args.size
+            @checksums_capacity = args[i + 1].to_i? || 10_000
+            i += 2
+            next
+          end
+        when "-S", "--seek"
+          if i + 1 < args.size
+            @seek_offset = args[i + 1].to_i64? || 0_i64
             i += 2
             next
           end

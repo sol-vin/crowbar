@@ -141,6 +141,51 @@ module Crowbar
       insert(start, replacement)
     end
 
+    # Clears all bytes in buffer
+    def clear : Nil
+      @bytes.clear
+    end
+
+    # Appends bytes to the buffer
+    def concat(slice : Bytes | Array(UInt8)) : Nil
+      slice.each { |b| @bytes << b }
+    end
+
+    # Searches for a needle sequence starting at offset
+    def index(needle : Bytes | Array(UInt8) | Buffer, offset : Int32 = 0) : Int32?
+      n_slice = needle.is_a?(Buffer) ? needle.to_slice : (needle.is_a?(Array(UInt8)) ? needle.to_slice : needle)
+      return nil if n_slice.empty? || offset >= size
+      return nil if size - offset < n_slice.size
+
+      start_pos = [0, offset].max
+      max_idx = size - n_slice.size
+      start_pos.upto(max_idx) do |i|
+        match = true
+        n_slice.each_with_index do |b, j|
+          if @bytes[i + j] != b
+            match = false
+            break
+          end
+        end
+        return i if match
+      end
+      nil
+    end
+
+    # Swaps two equal-length ranges of bytes in-place
+    def swap_ranges(pos1 : Int32, len : Int32, pos2 : Int32, len2 : Int32 = len) : Nil
+      return if pos1 < 0 || pos2 < 0
+      actual_len = [len, len2, size - pos1, size - pos2].min
+      return if actual_len <= 0
+
+      actual_len.times do |i|
+        v1 = @bytes[pos1 + i]
+        v2 = @bytes[pos2 + i]
+        @bytes[pos1 + i] = v2
+        @bytes[pos2 + i] = v1
+      end
+    end
+
     # Find line ranges (0-indexed [start, end_exclusive])
     def lines : Array(Tuple(Int32, Int32))
       ranges = [] of Tuple(Int32, Int32)

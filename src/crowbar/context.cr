@@ -8,9 +8,18 @@ module Crowbar
     getter prng : PRNG
     property iteration : Int64 = 0_i64
     property current_metadata : Metadata?
+    property secondary_samples : Array(Buffer) = [] of Buffer
 
     def initialize(seed : UInt64 = PRNG.default_seed)
       @prng = PRNG.new(seed)
+    end
+
+    def add_sample(buf : Buffer) : Nil
+      @secondary_samples << buf
+    end
+
+    def seek(offset : Int) : Nil
+      @prng.seek(offset)
     end
 
     def seed : UInt64
