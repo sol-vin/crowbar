@@ -1,4 +1,44 @@
 # CARBON CHANGELOG
+## [0.1.32] - 2026-10-04
+### ✨ Features & Improvements
+- ✦ complete overhaul of Crowbar into modern data transformation, structure-preserving mutation, and evolutionary testing framework (`f27db55`)
+- ✦ expand to 10 structure rules, 7 new selectors with combinators, and 9 mutator families (`a860ab0`)
+- ✦ add CLI & DSL tests, 3 runnable protocol fuzzer examples, and example output in README (`331b7b9`)
+- ✦ add stateful session system, structure-preserving media/document rules, and detector (`a0e3aa5`)
+- ✦ **[SPEC]** add comprehensive end-to-end CLI integration specs covering all features (`e69b414`)
+- ✦ **[CLI]** modularize CLI architecture, add RuleRegistry, JSON modes, and property-based test suites (`02e5fa7`)
+- ✦ add sequence splicing, Mutators::Security, uniqueness filtering, templating, and full session integration (`cdb00b7`)
+
+### 🐛 Bug Fixes
+- ✓ **[CLI]** use POSIX LibC poll for cross-platform STDIN detection (`6a94f50`)
+- ✓ **[CLI]** namespace POSIX poll to CrowbarLibC to resolve symbol collision with Opal (`f0891b3`)
+- ✓ **[CLI]** use Opal LibC.opal_poll for POSIX STDIN polling (`f7bc427`)
+- ✓ **[CLI]** align LibC PollFD and opal_poll with Opal definitions (`ee85f27`)
+- ✓ **[RULES]** prevent no-op mutations in HTTPRule (`e7bfcf5`)
+
+### 📚 Documentation
+- 📖 add crowbar.gif banner and update component tables in README (`3eae1a6`)
+- 📖 **[CHANGELOG]** record end-to-end CLI integration specs (`28f45e8`)
+- 📖 **[CHANGELOG]** record HTTPRule fix (`aa5d612`)
+- 📖 **[CHANGELOG]** record RuleRegistry, JSON modes, and property specs (`b510812`)
+- 📖 record sequence splicing, Mutators::Security, and session features in changelog (`c24bcf1`)
+
+### 🛠️ Chores & Tooling
+- • 1st commit (`4029cc1`)
+- • Readme fix (`32d3894`)
+- • More work, still not functional (`cf3c6f5`)
+- • Working now (`b3af601`)
+- • Added bytes, float to decimal (`361c37c`)
+- • Add  bytes generator, add string and char generators (`4ce4497`)
+- • Playing with weighting system (`bcca163`)
+- • Clean up, fixing read_me (`735df12`)
+- • Fixes to range, regex (`0e2b6c6`)
+- • Added crowbar mutator (`0d8f467`)
+- • Working on xiongmai example fuzzer (`f58e930`)
+- • Updated readme (`d869a4e`)
+- • Updates (`973ca85`)
+
+---
 ## [0.1.31] - 2026-10-04
 ### ✨ Features & Improvements
 - ✦ complete overhaul of Crowbar into modern data transformation, structure-preserving mutation, and evolutionary testing framework (`f27db55`)

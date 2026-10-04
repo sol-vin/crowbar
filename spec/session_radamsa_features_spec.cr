@@ -11,6 +11,12 @@ describe "Crowbar Session Radamsa Features Integration" do
 
   after_each do
     FileUtils.rm_rf(test_dir) if Dir.exists?(test_dir)
+    ENV.delete("CROWBAR_SESSION_DIR")
+  end
+
+  after_all do
+    FileUtils.rm_rf(test_dir) if Dir.exists?(test_dir)
+    ENV.delete("CROWBAR_SESSION_DIR")
   end
 
   it "renders output templates via 'crowbar session <id> next -t ...'" do
