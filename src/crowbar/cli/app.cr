@@ -29,7 +29,20 @@ require "./diff"
 {% end %}
 
 module Crowbar::CLI
+  class ExitException < Exception
+    getter code : Int32
+
+    def initialize(@code : Int32)
+      super("Process exited with code #{@code}")
+    end
+  end
+
   class App
+    property in_io : IO
+    property out_io : IO
+    property err_io : IO
+    property exit_handler : Proc(Int32, Nil)
+
     def self.run(args : Array(String) = ARGV)
       new.run(args)
     end
@@ -42,6 +55,30 @@ module Crowbar::CLI
     @selected_rule : String? = nil
     @show_diff : Bool = false
     @input_files : Array(String) = [] of String
+
+    def initialize(
+      @in_io : IO = STDIN,
+      @out_io : IO = STDOUT,
+      @err_io : IO = STDERR,
+      @exit_handler : Proc(Int32, Nil) = ->(code : Int32) { exit(code) },
+    )
+    end
+
+    private def puts(msg = "")
+      @out_io.puts(msg)
+    end
+
+    private def print(msg = "")
+      @out_io.print(msg)
+    end
+
+    private def err_puts(msg = "")
+      @err_io.puts(msg)
+    end
+
+    private def do_exit(code : Int32 = 0)
+      @exit_handler.call(code)
+    end
 
     def run(args : Array(String))
       # Handle session subcommands if present
@@ -88,17 +125,17 @@ module Crowbar::CLI
 
         opts.on("-l", "--list", "List all available rules, mutators, patterns, and selectors") do
           print_list
-          exit 0
+          do_exit(0)
         end
 
         opts.on("-v", "--version", "Print version") do
           puts "Crowbar #{Crowbar.version}"
-          exit 0
+          do_exit(0)
         end
 
         opts.on("-h", "--help", "Show help message") do
           puts opts
-          exit 0
+          do_exit(0)
         end
       end
 
@@ -109,8 +146,9 @@ module Crowbar::CLI
       input_buffer = read_input
 
       if input_buffer.empty?
-        STDERR.puts Opal.style.fg(:yellow).render("Warning: No input data provided. Supply a sample file or pipe data via STDIN.")
-        exit 1
+        err_puts Opal.style.fg(:yellow).render("Warning: No input data provided. Supply a sample file or pipe data via STDIN.")
+        do_exit(1)
+        return
       end
 
       # Construct engine
@@ -167,12 +205,12 @@ module Crowbar::CLI
         mutated = engine.transform(input_buffer)
 
         if @show_diff
-          HexDiff.render(input_buffer, mutated)
+          HexDiff.render(input_buffer, mutated, @out_io)
         elsif pattern = @output_pattern
           write_output(pattern, mutated, iteration)
         else
-          # Default: emit mutated bytes to STDOUT
-          STDOUT.write(mutated.to_slice)
+          # Default: emit mutated bytes to out_io
+          @out_io.write(mutated.to_slice)
         end
 
         break if @count > 0 && iteration >= @count
@@ -187,18 +225,19 @@ module Crowbar::CLI
         if File.exists?(file_path)
           Buffer.new(File.read(file_path))
         else
-          STDERR.puts "Error: File '#{file_path}' does not exist"
-          exit 1
+          err_puts "Error: File '#{file_path}' does not exist"
+          do_exit(1)
+          Buffer.new
         end
       else
-        # Read from STDIN
-        Buffer.from_io(STDIN)
+        # Read from input IO
+        Buffer.from_io(@in_io)
       end
     end
 
     private def write_output(pattern : String, buffer : Buffer, iteration : Int32)
       if pattern == "-"
-        STDOUT.write(buffer.to_slice)
+        @out_io.write(buffer.to_slice)
       else
         filename = pattern.gsub("%n", iteration.to_s)
         File.write(filename, buffer.to_slice)
@@ -323,25 +362,38 @@ module Crowbar::CLI
     end
 
     private def stdin_has_data? : Bool
-      return false if STDIN.tty?
+      if @in_io.is_a?(IO::Memory)
+        return @in_io.as(IO::Memory).bytesize > 0
+      end
+      if @in_io.responds_to?(:tty?)
+        return false if @in_io.tty?
+      end
       {% if flag?(:windows) %}
         h = LibC.GetStdHandle(LibC::STD_INPUT_HANDLE)
         if LibC.PeekNamedPipe(h, nil, 0, nil, out avail, nil) != 0
           return avail > 0
         end
-        begin
-          return STDIN.info.file? && STDIN.info.size > 0
-        rescue
-          false
+        if @in_io.is_a?(IO::FileDescriptor)
+          begin
+            fd_info = @in_io.as(IO::FileDescriptor).info
+            return fd_info.file? && fd_info.size > 0
+          rescue
+            false
+          end
         end
+        false
       {% else %}
-        begin
-          return true if STDIN.info.file? && STDIN.info.size > 0
-        rescue
+        if @in_io.is_a?(IO::FileDescriptor)
+          begin
+            fd_info = @in_io.as(IO::FileDescriptor).info
+            return true if fd_info.file? && fd_info.size > 0
+          rescue
+          end
+          pfd = LibC::PollFD.new(fd: @in_io.as(IO::FileDescriptor).fd, events: LibC::POLLIN, revents: 0_i16)
+          res = LibC.opal_poll(pointerof(pfd).as(Void*), 1_u64, 50)
+          return res > 0 && ((pfd.revents & LibC::POLLIN) != 0)
         end
-        pfd = LibC::PollFD.new(fd: STDIN.fd, events: LibC::POLLIN, revents: 0_i16)
-        res = LibC.opal_poll(pointerof(pfd).as(Void*), 1_u64, 50)
-        res > 0 && ((pfd.revents & LibC::POLLIN) != 0)
+        false
       {% end %}
     rescue
       false
@@ -349,7 +401,7 @@ module Crowbar::CLI
 
     private def read_piped_stdin : Buffer?
       return nil unless stdin_has_data?
-      buf = Buffer.from_io(STDIN)
+      buf = Buffer.from_io(@in_io)
       buf.empty? ? nil : buf
     rescue
       nil
@@ -362,7 +414,8 @@ module Crowbar::CLI
       sub_args = args[(session_idx + 1)..]
       if sub_args.empty? || sub_args[0] == "-h" || sub_args[0] == "--help"
         print_session_help
-        exit 0
+        do_exit(0)
+        return
       end
 
       # crowbar session list
@@ -374,8 +427,9 @@ module Crowbar::CLI
       # Support crowbar session setup <id> [options]
       if sub_args[0] == "setup"
         if sub_args.size < 2
-          STDERR.puts Opal.style.fg(:red).render("Error: Missing session ID. Usage: crowbar session setup <id> [options]")
-          exit 1
+          err_puts Opal.style.fg(:red).render("Error: Missing session ID. Usage: crowbar session setup <id> [options]")
+          do_exit(1)
+          return
         end
         session_id = sub_args[1]
         setup_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
@@ -400,28 +454,48 @@ module Crowbar::CLI
         setup_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
         handle_session_setup(session_id, setup_flags)
       else
-        STDERR.puts Opal.style.fg(:red).render("Unknown session action: '#{action}'")
+        err_puts Opal.style.fg(:red).render("Unknown session action: '#{action}'")
         print_session_help
-        exit 1
+        do_exit(1)
       end
     end
 
     private def handle_session_setup(session_id : String, sub_args : Array(String))
       session = Session.load(session_id)
       unless session
-        STDERR.puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
-        STDERR.puts "Create it first by piping baseline data:"
-        STDERR.puts "  cat sample.mp3 | crowbar session #{session_id} next"
-        exit 1
+        err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
+        err_puts "Create it first by piping baseline data:"
+        err_puts "  cat sample.mp3 | crowbar session #{session_id} next"
+        do_exit(1)
+        return
       end
 
-      if sub_args.empty?
+      if sub_args.empty? && @selected_rule.nil? && @selected_pattern.nil? && @selected_mutations.nil?
         display_session_setup_status(session)
         return
       end
 
       i = 0
       modified = false
+
+      if r = @selected_rule
+        session.add_rule(r)
+        puts Opal.style.fg(:green).render("Added rule '#{r}' to session #{session_id}")
+        modified = true
+      end
+
+      if m = @selected_mutations
+        mut_names = m.split(",").map(&.strip)
+        session.set_mutators(mut_names)
+        puts Opal.style.fg(:green).render("Set mutator pool to [#{mut_names.join(", ")}] for session #{session_id}")
+        modified = true
+      end
+
+      if pat = @selected_pattern
+        session.pattern_name = pat
+        puts Opal.style.fg(:green).render("Set pattern to #{pat} for session #{session_id}")
+        modified = true
+      end
 
       scope_name : String? = nil
       selector_type : String? = nil
@@ -655,10 +729,11 @@ module Crowbar::CLI
                   sess
                 else
                   if piped.nil?
-                    STDERR.puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
-                    STDERR.puts "Pipe initial data to start the session:"
-                    STDERR.puts "  echo 'sample' | crowbar session #{session_id} next"
-                    exit 1
+                    err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
+                    err_puts "Pipe initial data to start the session:"
+                    err_puts "  echo 'sample' | crowbar session #{session_id} next"
+                    do_exit(1)
+                    return
                   end
                   Session.load_or_create(session_id, piped, @selected_rule, @selected_pattern, @selected_mutations, @seed)
                 end
@@ -666,36 +741,40 @@ module Crowbar::CLI
       mutated = session.next_mutant
 
       if @show_diff
-        HexDiff.render(session.baseline, mutated)
+        HexDiff.render(session.baseline, mutated, @out_io)
       elsif pattern = @output_pattern
         write_output(pattern, mutated, session.iteration)
       else
-        STDOUT.write(mutated.to_slice)
+        @out_io.write(mutated.to_slice)
       end
     end
 
     private def handle_session_reward(session_id : String, val_str : String?)
       unless val_str
-        STDERR.puts Opal.style.fg(:red).render("Error: Missing reward value. Usage: crowbar session #{session_id} reward <value>")
-        STDERR.puts "Example: crowbar session #{session_id} reward 0.5"
-        exit 1
+        err_puts Opal.style.fg(:red).render("Error: Missing reward value. Usage: crowbar session #{session_id} reward <value>")
+        err_puts "Example: crowbar session #{session_id} reward 0.5"
+        do_exit(1)
+        return
       end
 
       reward_val = val_str.to_f64?
       unless reward_val
-        STDERR.puts Opal.style.fg(:red).render("Error: Invalid reward value '#{val_str}'. Must be a floating point number.")
-        exit 1
+        err_puts Opal.style.fg(:red).render("Error: Invalid reward value '#{val_str}'. Must be a floating point number.")
+        do_exit(1)
+        return
       end
 
       session = Session.load(session_id)
       unless session
-        STDERR.puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
-        exit 1
+        err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
+        do_exit(1)
+        return
       end
 
       if session.last_mutators.empty?
-        STDERR.puts Opal.style.fg(:red).render("Error: Session '#{session_id}' has not generated any items yet. Run 'crowbar session #{session_id} next' first.")
-        exit 1
+        err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' has not generated any items yet. Run 'crowbar session #{session_id} next' first.")
+        do_exit(1)
+        return
       end
 
       session.reward(reward_val)
@@ -713,8 +792,9 @@ module Crowbar::CLI
     private def handle_session_status(session_id : String)
       session = Session.load(session_id)
       unless session
-        STDERR.puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
-        exit 1
+        err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
+        do_exit(1)
+        return
       end
 
       title_style = Opal.style.bold.fg(:cyan)
