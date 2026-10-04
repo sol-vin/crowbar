@@ -22,7 +22,7 @@ settings:
       title: "\U0001F6E0️ Chores & Tooling"
       bullet: •
 releases:
-- version: 0.1.28
+- version: 0.1.29
   date: "2026-10-04"
   status: active
   entries:
@@ -168,6 +168,167 @@ releases:
     bullet: "\U0001F4D6"
     badge: '[CHANGELOG]'
     hash: aa5d612
+    author: Ian Rash
+  - type: feat
+    description: modularize CLI architecture, add RuleRegistry, JSON modes, and property-based
+      test suites
+    bullet: ✦
+    badge: '[CLI]'
+    hash: 02e5fa7
+    author: Ian Rash
+- version: 0.1.28
+  date: "2026-10-04"
+  status: released
+  entries:
+  - type: other
+    description: 1st commit
+    bullet: •
+    hash: 4029cc1
+    author: Ian Rash
+  - type: other
+    description: Readme fix
+    bullet: •
+    hash: 32d3894
+    author: Ian Rash
+  - type: other
+    description: More work, still not functional
+    bullet: •
+    hash: cf3c6f5
+    author: Ian Rash
+  - type: other
+    description: Working now
+    bullet: •
+    hash: b3af601
+    author: Ian Rash
+  - type: other
+    description: Added bytes, float to decimal
+    bullet: •
+    hash: 361c37c
+    author: Ian Rash
+  - type: other
+    description: Add  bytes generator, add string and char generators
+    bullet: •
+    hash: 4ce4497
+    author: Ian Rash
+  - type: other
+    description: Playing with weighting system
+    bullet: •
+    hash: bcca163
+    author: Ian Rash
+  - type: other
+    description: Clean up, fixing read_me
+    bullet: •
+    hash: 735df12
+    author: Ian Rash
+  - type: other
+    description: Fixes to range, regex
+    bullet: •
+    hash: 0e2b6c6
+    author: Ian Rash
+  - type: other
+    description: Added crowbar mutator
+    bullet: •
+    hash: 0d8f467
+    author: Ian Rash
+  - type: other
+    description: Working on xiongmai example fuzzer
+    bullet: •
+    hash: f58e930
+    author: Ian Rash
+  - type: other
+    description: Updated readme
+    bullet: •
+    hash: d869a4e
+    author: Ian Rash
+  - type: other
+    description: Updates
+    bullet: •
+    hash: 973ca85
+    author: Ian Rash
+  - type: feat
+    description: complete overhaul of Crowbar into modern data transformation, structure-preserving
+      mutation, and evolutionary testing framework
+    bullet: ✦
+    hash: f27db55
+    author: Ian Rash
+  - type: feat
+    description: expand to 10 structure rules, 7 new selectors with combinators, and
+      9 mutator families
+    bullet: ✦
+    hash: a860ab0
+    author: Ian Rash
+  - type: docs
+    description: add crowbar.gif banner and update component tables in README
+    bullet: "\U0001F4D6"
+    hash: 3eae1a6
+    author: Ian Rash
+  - type: feat
+    description: add CLI & DSL tests, 3 runnable protocol fuzzer examples, and example
+      output in README
+    bullet: ✦
+    hash: 331b7b9
+    author: Ian Rash
+  - type: feat
+    description: add stateful session system, structure-preserving media/document
+      rules, and detector
+    bullet: ✦
+    hash: a0e3aa5
+    author: Ian Rash
+  - type: fix
+    description: use POSIX LibC poll for cross-platform STDIN detection
+    bullet: ✓
+    badge: '[CLI]'
+    hash: 6a94f50
+    author: Ian Rash
+  - type: fix
+    description: namespace POSIX poll to CrowbarLibC to resolve symbol collision with
+      Opal
+    bullet: ✓
+    badge: '[CLI]'
+    hash: f0891b3
+    author: Ian Rash
+  - type: fix
+    description: use Opal LibC.opal_poll for POSIX STDIN polling
+    bullet: ✓
+    badge: '[CLI]'
+    hash: f7bc427
+    author: Ian Rash
+  - type: fix
+    description: align LibC PollFD and opal_poll with Opal definitions
+    bullet: ✓
+    badge: '[CLI]'
+    hash: ee85f27
+    author: Ian Rash
+  - type: feat
+    description: add comprehensive end-to-end CLI integration specs covering all features
+    bullet: ✦
+    badge: '[SPEC]'
+    hash: e69b414
+    author: Ian Rash
+  - type: docs
+    description: record end-to-end CLI integration specs
+    bullet: "\U0001F4D6"
+    badge: '[CHANGELOG]'
+    hash: 28f45e8
+    author: Ian Rash
+  - type: fix
+    description: prevent no-op mutations in HTTPRule
+    bullet: ✓
+    badge: '[RULES]'
+    hash: e7bfcf5
+    author: Ian Rash
+  - type: docs
+    description: record HTTPRule fix
+    bullet: "\U0001F4D6"
+    badge: '[CHANGELOG]'
+    hash: aa5d612
+    author: Ian Rash
+  - type: feat
+    description: modularize CLI architecture, add RuleRegistry, JSON modes, and property-based
+      test suites
+    bullet: ✦
+    badge: '[CLI]'
+    hash: 02e5fa7
     author: Ian Rash
 - version: 0.1.27
   date: "2026-10-04"
