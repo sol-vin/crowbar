@@ -14,16 +14,6 @@ require "./diff"
       lpBytesLeftThisMessage : DWORD*,
     ) : BOOL
   end
-{% else %}
-  lib CrowbarLibC
-    struct Pollfd
-      fd : Int32
-      events : Int16
-      revents : Int16
-    end
-
-    fun poll(fds : Pollfd*, nfds : LibC::SizeT, timeout : Int32) : Int32
-  end
 {% end %}
 
 module Crowbar::CLI
@@ -337,9 +327,9 @@ module Crowbar::CLI
           return true if STDIN.info.file? && STDIN.info.size > 0
         rescue
         end
-        pfd = CrowbarLibC::Pollfd.new(fd: STDIN.fd, events: 0x0001_i16, revents: 0_i16)
-        res = CrowbarLibC.poll(pointerof(pfd), 1_u64, 50)
-        res > 0 && ((pfd.revents & 0x0001_i16) != 0)
+        pfd = LibC::PollFD.new(fd: STDIN.fd, events: LibC::POLLIN, revents: 0_i16)
+        res = LibC.opal_poll(pointerof(pfd).as(Void*), 1_u64, 50)
+        res > 0 && ((pfd.revents & LibC::POLLIN) != 0)
       {% end %}
     rescue
       false
