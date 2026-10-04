@@ -93,6 +93,18 @@ module Crowbar::Rules
       io << body_section
 
       reconstructed = io.to_slice
+      if reconstructed == buffer.to_slice
+        headers << "X-Fuzz: #{context.prng.rand_log(8)}"
+        io = IO::Memory.new
+        io << start_line << "\r\n"
+        headers.each do |h|
+          io << h << "\r\n"
+        end
+        io << "\r\n"
+        io << body_section
+        reconstructed = io.to_slice
+      end
+
       buffer.replace_range(0, buffer.size, reconstructed)
       context.record_mutation(name)
       true
@@ -136,8 +148,8 @@ module Crowbar::Rules
         end
       when 1 # Path repetition / depth
         path = path + "/../" + context.prng.rand_log(6).to_s
-      else # Method case / variation
-        method = context.prng.choice(["GET", "POST", "PUT", "HEAD", "OPTIONS", "PATCH"])
+        methods = ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"].reject { |m| m == method }
+        method = methods.empty? ? "POST" : context.prng.choice(methods)
       end
 
       "#{method} #{path} #{version}"
@@ -154,7 +166,7 @@ module Crowbar::Rules
         val = val.strip
         mutated_val = case context.prng.rand(3)
                       when 0 then context.prng.choice(Mutators::BoundaryNumbers::BOUNDARIES)
-                      when 1 then val * context.prng.rand(2..5)
+                      when 1 then val.empty? ? "fuzz" : val * context.prng.rand(2..5)
                       else        "\u202E" + val
                       end
         new_headers[idx] = "#{name}: #{mutated_val}"
@@ -165,7 +177,7 @@ module Crowbar::Rules
     private def duplicate_or_reorder_headers(headers : Array(String), context : Context) : Array(String)
       return headers if headers.empty?
       new_headers = headers.dup
-      if context.prng.rand_bool
+      if new_headers.size <= 1 || context.prng.rand_bool
         # Duplicate random header
         h = context.prng.choice(new_headers)
         new_headers.insert(context.prng.rand(new_headers.size + 1), h)
