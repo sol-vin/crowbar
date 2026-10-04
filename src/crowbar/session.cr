@@ -247,13 +247,12 @@ module Crowbar
       engine = Engine.new(current_seed)
       engine.evolution.enabled = true
       engine.pool.bandit = engine.evolution.bandit
+      engine.pool.use_bandit = true
 
       # Restore pattern
       if pat = @pattern_name
-        case pat
-        when "od", "once"  then engine.pattern = Patterns::Once.new
-        when "bu", "burst" then engine.pattern = Patterns::Burst.new
-        when "nd", "many"  then engine.pattern = Patterns::Many.new
+        if p_obj = Patterns.create?(pat)
+          engine.pattern = p_obj
         end
       end
 
@@ -263,25 +262,8 @@ module Crowbar
         rules_to_load << r unless r.empty?
       end
       rules_to_load.each do |r|
-        case r.downcase
-        when "json"          then engine.add_rule(Rules::JSONRule.new)
-        when "yaml", "yml"   then engine.add_rule(Rules::YAMLRule.new)
-        when "http"          then engine.add_rule(Rules::HTTPRule.new)
-        when "dns"           then engine.add_rule(Rules::DNSRule.new)
-        when "csv", "tsv"    then engine.add_rule(Rules::CSVRule.new)
-        when "xml", "html"   then engine.add_rule(Rules::XMLRule.new)
-        when "url", "uri"    then engine.add_rule(Rules::URLRule.new)
-        when "tlv"           then engine.add_rule(Rules::TLVRule.new)
-        when "base64", "b64" then engine.add_rule(Rules::Base64Rule.new)
-        when "varint", "leb" then engine.add_rule(Rules::VarintRule.new)
-        when "ftp"           then engine.add_rule(Rules::FTPRule.new)
-        when "sql"           then engine.add_rule(Rules::SQLRule.new)
-        when "png"           then engine.add_rule(Rules::PNGRule.new)
-        when "bmp"           then engine.add_rule(Rules::BMPRule.new)
-        when "wav"           then engine.add_rule(Rules::WAVRule.new)
-        when "mp3"           then engine.add_rule(Rules::MP3Rule.new)
-        when "wad"           then engine.add_rule(Rules::WADRule.new)
-        when "pdf"           then engine.add_rule(Rules::PDFRule.new)
+        if rule_obj = Rules::Registry.create?(r)
+          engine.add_rule(rule_obj)
         end
       end
 

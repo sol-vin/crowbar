@@ -74,21 +74,19 @@ module Crowbar::Rules
         # Swap two directory entries in the table
         if lumps.size >= 2
           idx1 = context.prng.rand(lumps.size)
-          idx2 = context.prng.rand(lumps.size)
-          if idx1 != idx2
-            swap_directory_entries(lumps[idx1], lumps[idx2], buffer)
-            mutated = true
-          end
+          idx2 = (idx1 + 1 + context.prng.rand(lumps.size - 1)) % lumps.size
+          swap_directory_entries(lumps[idx1], lumps[idx2], buffer)
+          mutated = true
+        else
+          lump = lumps.first
+          mutate_lump_entry(lump, buffer, context)
+          mutated = true
         end
       else
         # Mutate WAD Header: toggle IWAD <-> PWAD or fuzz lump count
         if context.prng.rand_bool
           # Toggle IWAD / PWAD
-          if buffer[0] == 0x49_u8 # 'I'
-            buffer[0] = 0x50_u8   # 'P'
-          else
-            buffer[0] = 0x49_u8 # 'I'
-          end
+          buffer[0] = (buffer[0] == 0x49_u8 ? 0x50_u8 : 0x49_u8)
           mutated = true
         else
           # Fuzz numlumps off-by-one or boundary
@@ -97,6 +95,11 @@ module Crowbar::Rules
           IO::ByteFormat::LittleEndian.encode(new_count, buffer[4, 4])
           mutated = true
         end
+      end
+
+      unless mutated
+        buffer[0] = (buffer[0] == 0x49_u8 ? 0x50_u8 : 0x49_u8)
+        mutated = true
       end
 
       if mutated

@@ -122,5 +122,24 @@ module Crowbar
         mutated_any
       end
     end
+
+    # Resolves a pattern by name or alias ("once"/"od", "burst"/"bu", "many"/"nd")
+    def self.create?(name : String) : Pattern?
+      case name.strip.downcase
+      when "od", "once"  then Once.new
+      when "bu", "burst" then Burst.new
+      when "nd", "many"  then Many.new
+      else                    nil
+      end
+    end
+
+    # Catalog of available patterns with canonical name, alias, and description
+    def self.catalog : Array(Tuple(String, String, String))
+      [
+        {"many", "nd", "Mutate multiple times with geometric probability decay (default)"},
+        {"burst", "bu", "Mutate in a localized burst of several changes"},
+        {"once", "od", "Mutate once"},
+      ]
+    end
   end
 end

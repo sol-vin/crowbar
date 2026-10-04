@@ -38,6 +38,8 @@ module Crowbar::Rules
 
       first_word = str.split(/\s+/, 2)[0].upcase
       SQL_KEYWORDS.includes?(first_word)
+    rescue
+      false
     end
 
     def apply(context : Context, buffer : Buffer) : Bool

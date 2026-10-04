@@ -46,6 +46,8 @@ module Crowbar::Rules
       # Match standard FTP command verb
       verb = first_line.split(" ", 2)[0].upcase
       COMMON_COMMANDS.includes?(verb)
+    rescue
+      false
     end
 
     def apply(context : Context, buffer : Buffer) : Bool
