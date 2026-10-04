@@ -14,6 +14,7 @@ require "./crowbar/rules/dns"
 require "./crowbar/evolution/manager"
 require "./crowbar/engine"
 require "./crowbar/dsl/builder"
+require "./crowbar/session"
 
 {% unless flag?(:release) %}
   require "./docs"

@@ -3,6 +3,19 @@ require "opal"
 require "../../crowbar"
 require "./diff"
 
+{% if flag?(:windows) %}
+  lib LibC
+    fun PeekNamedPipe(
+      hNamedPipe : HANDLE,
+      lpBuffer : Void*,
+      nBufferSize : DWORD,
+      lpBytesRead : DWORD*,
+      lpTotalBytesAvail : DWORD*,
+      lpBytesLeftThisMessage : DWORD*,
+    ) : BOOL
+  end
+{% end %}
+
 module Crowbar::CLI
   class App
     def self.run(args : Array(String) = ARGV)
@@ -19,9 +32,19 @@ module Crowbar::CLI
     @input_files : Array(String) = [] of String
 
     def run(args : Array(String))
+      # Handle session subcommands if present
+      if args.includes?("session")
+        remaining = extract_flags(args)
+        handle_session_command(remaining)
+        return
+      end
+
       parser = OptionParser.new do |opts|
         opts.banner = Opal.style.bold.fg(:cyan).render("Crowbar #{Crowbar.version} - Data Transformation & Fuzzing Engine") +
-                      "\nUsage: crowbar [options] [sample-files...]"
+                      "\nUsage: crowbar [options] [sample-files...]" +
+                      "\n       crowbar session <id> next" +
+                      "\n       crowbar session <id> reward <value>" +
+                      "\n       crowbar session <id> reset"
 
         opts.on("-n COUNT", "--count COUNT", "Number of test cases to generate (default: 1, -1 for inf)") do |c|
           @count = c.to_i
@@ -43,7 +66,7 @@ module Crowbar::CLI
           @selected_pattern = p
         end
 
-        opts.on("-r RULE", "--rule RULE", "Structure-preserving rule: json, yaml, http, dns, csv, xml, url, tlv, base64, varint") do |r|
+        opts.on("-r RULE", "--rule RULE", "Structure-preserving rule: json, yaml, http, dns, csv, xml, url, tlv, base64, varint, ftp, sql") do |r|
           @selected_rule = r
         end
 
@@ -103,6 +126,14 @@ module Crowbar::CLI
         when "tlv"           then engine.add_rule(Rules::TLVRule.new)
         when "base64", "b64" then engine.add_rule(Rules::Base64Rule.new)
         when "varint", "leb" then engine.add_rule(Rules::VarintRule.new)
+        when "ftp"           then engine.add_rule(Rules::FTPRule.new)
+        when "sql"           then engine.add_rule(Rules::SQLRule.new)
+        when "png"           then engine.add_rule(Rules::PNGRule.new)
+        when "bmp"           then engine.add_rule(Rules::BMPRule.new)
+        when "wav"           then engine.add_rule(Rules::WAVRule.new)
+        when "mp3"           then engine.add_rule(Rules::MP3Rule.new)
+        when "wad"           then engine.add_rule(Rules::WADRule.new)
+        when "pdf"           then engine.add_rule(Rules::PDFRule.new)
         end
       end
 
@@ -171,7 +202,7 @@ module Crowbar::CLI
       puts title_style.render("=== Crowbar Component Catalog ===")
       puts ""
 
-      puts category_style.render("Structure-Preserving Rules (10 Formats):")
+      puts category_style.render("Structure-Preserving Rules (18 Formats):")
       rules = [
         {"json", "Valid JSON AST with mutated leaf values and bounds"},
         {"yaml", "Valid YAML document hierarchy with mutated scalars"},
@@ -183,6 +214,14 @@ module Crowbar::CLI
         {"tlv", "Type-Length-Value binary packet framing and boundary lengths"},
         {"base64", "Transparent Base64 envelope decode-mutate-encode"},
         {"varint", "LEB128/Protobuf 7-bit continuation bit integer streams"},
+        {"ftp", "RFC 959 FTP command and response streams with CRLF framing"},
+        {"sql", "Structure-preserving SQL statement with mutated literals & operators"},
+        {"png", "Portable Network Graphics with automatic chunk framing & CRC32 recalculation"},
+        {"bmp", "Windows Bitmap (BMP) with header dimensions, compression & pixel rasters"},
+        {"wav", "RIFF/WAVE audio streams with fmt parameters, channels & PCM samples"},
+        {"mp3", "MPEG Layer III audio with ID3v2 tags and synchronized frame headers"},
+        {"wad", "Doom WAD directory tables, lump metadata, and THINGS/LINEDEFS payloads"},
+        {"pdf", "Portable Document Format (PDF) objects, dictionaries, streams & xrefs"},
       ]
       rules.each do |(code, desc)|
         puts sprintf("  %-10s %s", name_style.render(code), dim_style.render(desc))
@@ -195,8 +234,8 @@ module Crowbar::CLI
       puts "  " + name_style.render("bu, burst") + " - Mutate in localized burst clusters"
       puts ""
 
-      puts category_style.render("Mutators (30 Arsenal Tools):")
       pool = MutatorPool.new
+      puts category_style.render("Mutators (#{pool.mutators.size} Arsenal Tools):")
       pool.mutators.each do |m|
         puts sprintf("  %-8s %s", name_style.render(m.name), dim_style.render(m.description))
       end
@@ -221,6 +260,515 @@ module Crowbar::CLI
         puts sprintf("  %-10s %s", name_style.render(code), dim_style.render(desc))
       end
       puts ""
+    end
+
+    private def extract_flags(args : Array(String)) : Array(String)
+      remaining = [] of String
+      i = 0
+      while i < args.size
+        arg = args[i]
+        case arg
+        when "-r", "--rule"
+          if i + 1 < args.size
+            @selected_rule = args[i + 1]
+            i += 2
+            next
+          end
+        when "-s", "--seed"
+          if i + 1 < args.size
+            @seed = args[i + 1].to_u64? || args[i + 1].hash.to_u64
+            i += 2
+            next
+          end
+        when "-p", "--patterns"
+          if i + 1 < args.size
+            @selected_pattern = args[i + 1]
+            i += 2
+            next
+          end
+        when "-m", "--mutations"
+          if i + 1 < args.size
+            @selected_mutations = args[i + 1]
+            i += 2
+            next
+          end
+        when "-d", "--diff"
+          @show_diff = true
+          i += 1
+          next
+        when "-o", "--output"
+          if i + 1 < args.size
+            @output_pattern = args[i + 1]
+            i += 2
+            next
+          end
+        else
+          remaining << arg
+          i += 1
+        end
+      end
+      remaining
+    end
+
+    private def stdin_has_data? : Bool
+      return false if STDIN.tty?
+      {% if flag?(:windows) %}
+        h = LibC.GetStdHandle(LibC::STD_INPUT_HANDLE)
+        if LibC.PeekNamedPipe(h, nil, 0, nil, out avail, nil) != 0
+          return avail > 0
+        end
+        false
+      {% else %}
+        selected = IO.select([STDIN], timeout: 0.seconds)
+        !selected.nil? && !selected.empty?
+      {% end %}
+    rescue
+      false
+    end
+
+    private def read_piped_stdin : Buffer?
+      return nil unless stdin_has_data?
+      buf = Buffer.from_io(STDIN)
+      buf.empty? ? nil : buf
+    rescue
+      nil
+    end
+
+    private def handle_session_command(args : Array(String))
+      session_idx = args.index("session")
+      return unless session_idx
+
+      sub_args = args[(session_idx + 1)..]
+      if sub_args.empty? || sub_args[0] == "-h" || sub_args[0] == "--help"
+        print_session_help
+        exit 0
+      end
+
+      # crowbar session list
+      if sub_args[0] == "list"
+        handle_session_list
+        return
+      end
+
+      # Support crowbar session setup <id> [options]
+      if sub_args[0] == "setup"
+        if sub_args.size < 2
+          STDERR.puts Opal.style.fg(:red).render("Error: Missing session ID. Usage: crowbar session setup <id> [options]")
+          exit 1
+        end
+        session_id = sub_args[1]
+        setup_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
+        handle_session_setup(session_id, setup_flags)
+        return
+      end
+
+      session_id = sub_args[0]
+      action = sub_args.size > 1 ? sub_args[1].downcase : "next"
+
+      case action
+      when "next"
+        handle_session_next(session_id)
+      when "reward"
+        val_str = sub_args.size > 2 ? sub_args[2] : nil
+        handle_session_reward(session_id, val_str)
+      when "reset"
+        handle_session_reset(session_id)
+      when "status", "info"
+        handle_session_status(session_id)
+      when "setup"
+        setup_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
+        handle_session_setup(session_id, setup_flags)
+      else
+        STDERR.puts Opal.style.fg(:red).render("Unknown session action: '#{action}'")
+        print_session_help
+        exit 1
+      end
+    end
+
+    private def handle_session_setup(session_id : String, sub_args : Array(String))
+      session = Session.load(session_id)
+      unless session
+        STDERR.puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
+        STDERR.puts "Create it first by piping baseline data:"
+        STDERR.puts "  cat sample.mp3 | crowbar session #{session_id} next"
+        exit 1
+      end
+
+      if sub_args.empty?
+        display_session_setup_status(session)
+        return
+      end
+
+      i = 0
+      modified = false
+
+      scope_name : String? = nil
+      selector_type : String? = nil
+      scope_params = Hash(String, String).new
+      scope_weight = 1.0
+
+      while i < sub_args.size
+        arg = sub_args[i]
+        case arg
+        when "--add-rule", "-r"
+          if i + 1 < sub_args.size
+            r = sub_args[i + 1]
+            session.add_rule(r)
+            puts Opal.style.fg(:green).render("Added rule '#{r}' to session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--remove-rule"
+          if i + 1 < sub_args.size
+            r = sub_args[i + 1]
+            session.remove_rule(r)
+            puts Opal.style.fg(:yellow).render("Removed rule '#{r}' from session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--clear-rules"
+          session.clear_rules
+          puts Opal.style.fg(:yellow).render("Cleared all rules for session #{session_id}")
+          modified = true
+          i += 1
+        when "--auto-rule", "--auto-detect"
+          if detected = session.auto_detect_rule
+            puts Opal.style.fg(:green).render("Auto-detected and applied rule '#{detected}' to session #{session_id}")
+            modified = true
+          else
+            puts Opal.style.fg(:yellow).render("Could not auto-detect format from baseline for session #{session_id}")
+          end
+          i += 1
+        when "--add-mutator", "-m"
+          if i + 1 < sub_args.size
+            m = sub_args[i + 1]
+            session.add_mutator(m)
+            puts Opal.style.fg(:green).render("Added mutator '#{m}' to session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--remove-mutator"
+          if i + 1 < sub_args.size
+            m = sub_args[i + 1]
+            session.remove_mutator(m)
+            puts Opal.style.fg(:yellow).render("Removed mutator '#{m}' from session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--set-mutators"
+          if i + 1 < sub_args.size
+            list = sub_args[i + 1].split(",")
+            session.set_mutators(list)
+            puts Opal.style.fg(:green).render("Set mutator pool to [#{list.join(", ")}] for session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--reset-mutators"
+          session.reset_mutators
+          puts Opal.style.fg(:yellow).render("Reset mutator pool to default (all mutators) for session #{session_id}")
+          modified = true
+          i += 1
+        when "--pattern", "-p"
+          if i + 1 < sub_args.size
+            p = sub_args[i + 1]
+            session.set_pattern(p)
+            puts Opal.style.fg(:green).render("Set pattern to '#{p}' for session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--add-scope"
+          if i + 1 < sub_args.size
+            scope_name = sub_args[i + 1]
+            i += 2
+          else
+            i += 1
+          end
+        when "--selector"
+          if i + 1 < sub_args.size
+            selector_type = sub_args[i + 1]
+            i += 2
+          else
+            i += 1
+          end
+        when "--params"
+          if i + 1 < sub_args.size
+            pairs = sub_args[i + 1].split(",")
+            pairs.each do |pair|
+              if pair.includes?(":")
+                k, v = pair.split(":", 2)
+                scope_params[k.strip] = v.strip
+              end
+            end
+            i += 2
+          else
+            i += 1
+          end
+        when "--weight", "-w"
+          if i + 1 < sub_args.size
+            scope_weight = sub_args[i + 1].to_f64? || 1.0
+            i += 2
+          else
+            i += 1
+          end
+        when "--remove-scope"
+          if i + 1 < sub_args.size
+            s_name = sub_args[i + 1]
+            session.remove_scope(s_name)
+            puts Opal.style.fg(:yellow).render("Removed scope '#{s_name}' from session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--clear-scopes"
+          session.clear_scopes
+          puts Opal.style.fg(:yellow).render("Cleared all scopes from session #{session_id}")
+          modified = true
+          i += 1
+        when "-h", "--help"
+          print_session_setup_help(session_id)
+          exit 0
+        else
+          i += 1
+        end
+      end
+
+      if scope_name
+        sel_type = selector_type || "range"
+        session.add_scope(scope_name, sel_type, scope_params, scope_weight)
+        params_desc = scope_params.empty? ? "" : " with params #{scope_params.inspect}"
+        puts Opal.style.fg(:green).render("Configured scope '#{scope_name}' (#{sel_type}#{params_desc}, weight: #{scope_weight}) for session #{session_id}")
+        modified = true
+      end
+
+      if modified
+        session.save
+      else
+        display_session_setup_status(session)
+      end
+    end
+
+    private def display_session_setup_status(session : Session)
+      title_style = Opal.style.bold.fg(:cyan)
+      label_style = Opal.style.bold.fg(:yellow)
+
+      puts title_style.render("=== Session #{session.id} Configuration ===")
+      rules_str = session.active_rules.empty? ? (session.rule_name || "none") : session.active_rules.join(", ")
+      puts "#{label_style.render("Active Rules:")}    #{rules_str}"
+      puts "#{label_style.render("Pattern:")}         #{session.pattern_name || "many (default)"}"
+      puts "#{label_style.render("Mutator Pool:")}    #{session.selected_mutations || "all mutators active"}"
+      if session.scopes.empty?
+        puts "#{label_style.render("Scopes:")}          none (full buffer)"
+      else
+        puts "#{label_style.render("Scopes:")}          #{session.scopes.size} configured"
+        session.scopes.each do |sc|
+          params_str = sc.params.empty? ? "" : " (#{sc.params.map { |k, v| "#{k}: #{v}" }.join(", ")})"
+          puts "  - #{sc.name}: #{sc.selector_type}#{params_str} [weight: #{sc.weight}]"
+        end
+      end
+      puts ""
+      puts "Use 'crowbar session #{session.id} setup --help' for setup options."
+    end
+
+    private def print_session_setup_help(session_id : String)
+      banner = Opal.style.bold.fg(:cyan).render("Crowbar Session Setup - Configure Rules, Mutators, and Scopes")
+      puts banner
+      puts "\nUsage: crowbar session #{session_id} setup [options]"
+      puts ""
+      puts "Rule Management:"
+      puts "  --add-rule <name>, -r <name>    Add a structure-preserving rule (e.g. mp3, png, wav, http)"
+      puts "  --remove-rule <name>            Remove a rule from the session"
+      puts "  --clear-rules                   Remove all rules from the session"
+      puts "  --auto-rule, --auto-detect      Auto-detect format from session baseline and attach rule"
+      puts ""
+      puts "Mutator Pool Management:"
+      puts "  --add-mutator <name>, -m <name> Add a mutator to active pool (e.g. num, bf, wd)"
+      puts "  --remove-mutator <name>         Remove a mutator from active pool"
+      puts "  --set-mutators <m1,m2,...>      Set exact active mutator pool"
+      puts "  --reset-mutators                Reset mutator pool to default (all mutators)"
+      puts ""
+      puts "Pattern Selection:"
+      puts "  --pattern <pat>, -p <pat>       Set mutation pattern (once, many, burst)"
+      puts ""
+      puts "Targeted Scope Management:"
+      puts "  --add-scope <name>              Define or update a scoped target region"
+      puts "  --selector <type>               Selector type: range, header, footer, delimited, chars, stride, entropy, regex"
+      puts "  --params <k:v,...>              Parameters (e.g. start:0,end:10 or length:16 or delimiter:,)"
+      puts "  --weight <float>, -w <float>    Scope selection weight (default 1.0)"
+      puts "  --remove-scope <name>           Remove a configured scope"
+      puts "  --clear-scopes                  Remove all configured scopes"
+      puts ""
+      puts "Examples:"
+      puts "  crowbar session #{session_id} setup --add-rule mp3"
+      puts "  crowbar session #{session_id} setup --set-mutators num,bf,wd -p burst"
+      puts "  crowbar session #{session_id} setup --add-scope body --selector header --params length:32"
+      puts "  crowbar session #{session_id} setup --auto-rule"
+    end
+
+    private def handle_session_next(session_id : String)
+      piped = read_piped_stdin
+
+      session = if Session.exists?(session_id)
+                  sess = Session.load(session_id).not_nil!
+                  if piped && piped != sess.baseline
+                    # Auto-reset session on new input text
+                    sess.reset_with(piped, @selected_rule, @selected_pattern, @selected_mutations, @seed)
+                    sess.save
+                  elsif @selected_rule || @selected_pattern || @selected_mutations
+                    sess.rule_name = @selected_rule if @selected_rule
+                    sess.pattern_name = @selected_pattern if @selected_pattern
+                    sess.selected_mutations = @selected_mutations if @selected_mutations
+                  end
+                  sess
+                else
+                  if piped.nil?
+                    STDERR.puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
+                    STDERR.puts "Pipe initial data to start the session:"
+                    STDERR.puts "  echo 'sample' | crowbar session #{session_id} next"
+                    exit 1
+                  end
+                  Session.load_or_create(session_id, piped, @selected_rule, @selected_pattern, @selected_mutations, @seed)
+                end
+
+      mutated = session.next_mutant
+
+      if @show_diff
+        HexDiff.render(session.baseline, mutated)
+      elsif pattern = @output_pattern
+        write_output(pattern, mutated, session.iteration)
+      else
+        STDOUT.write(mutated.to_slice)
+      end
+    end
+
+    private def handle_session_reward(session_id : String, val_str : String?)
+      unless val_str
+        STDERR.puts Opal.style.fg(:red).render("Error: Missing reward value. Usage: crowbar session #{session_id} reward <value>")
+        STDERR.puts "Example: crowbar session #{session_id} reward 0.5"
+        exit 1
+      end
+
+      reward_val = val_str.to_f64?
+      unless reward_val
+        STDERR.puts Opal.style.fg(:red).render("Error: Invalid reward value '#{val_str}'. Must be a floating point number.")
+        exit 1
+      end
+
+      session = Session.load(session_id)
+      unless session
+        STDERR.puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
+        exit 1
+      end
+
+      if session.last_mutators.empty?
+        STDERR.puts Opal.style.fg(:red).render("Error: Session '#{session_id}' has not generated any items yet. Run 'crowbar session #{session_id} next' first.")
+        exit 1
+      end
+
+      session.reward(reward_val)
+      puts Opal.style.fg(:green).render("Session #{session_id}: Recorded reward #{reward_val} for mutators [#{session.last_mutators.join(", ")}] (Iteration #{session.iteration})")
+    end
+
+    private def handle_session_reset(session_id : String)
+      if Session.reset(session_id)
+        puts Opal.style.fg(:green).render("Session '#{session_id}' has been reset.")
+      else
+        puts Opal.style.fg(:yellow).render("Session '#{session_id}' does not exist (nothing to reset).")
+      end
+    end
+
+    private def handle_session_status(session_id : String)
+      session = Session.load(session_id)
+      unless session
+        STDERR.puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
+        exit 1
+      end
+
+      title_style = Opal.style.bold.fg(:cyan)
+      label_style = Opal.style.bold.fg(:yellow)
+
+      puts title_style.render("=== Crowbar Session #{session.id} ===")
+      puts "#{label_style.render("Created:")}   #{session.created_at}"
+      puts "#{label_style.render("Updated:")}   #{session.updated_at}"
+      puts "#{label_style.render("Iteration:")} #{session.iteration}"
+      puts "#{label_style.render("Baseline:")}  #{session.baseline.size} B"
+      rules_str = session.active_rules.empty? ? (session.rule_name || "none") : session.active_rules.join(", ")
+      puts "#{label_style.render("Rules:")}     #{rules_str}"
+      puts "#{label_style.render("Pattern:")}   #{session.pattern_name || "many (default)"}"
+      puts "#{label_style.render("Mutators:")}  #{session.selected_mutations || "all mutators active"}"
+      if !session.scopes.empty?
+        puts "#{label_style.render("Scopes:")}    #{session.scopes.size} configured"
+        session.scopes.each do |sc|
+          params_str = sc.params.empty? ? "" : " (#{sc.params.map { |k, v| "#{k}: #{v}" }.join(", ")})"
+          puts "  - #{sc.name}: #{sc.selector_type}#{params_str} [weight: #{sc.weight}]"
+        end
+      end
+      if r = session.last_reward
+        puts "#{label_style.render("Last Reward:")} #{r}"
+      end
+      if !session.last_mutators.empty?
+        puts "#{label_style.render("Last Mutators:")} #{session.last_mutators.join(", ")}"
+      end
+      puts "#{label_style.render("Corpus Size:")} #{session.corpus_items.size} candidates"
+      puts "#{label_style.render("Bandit Pulls:")} #{session.total_pulls} total pulls across #{session.arms.size} arms"
+      if !session.arms.empty?
+        puts ""
+        puts label_style.render("Top Mutators by Cumulative Reward:")
+        session.arms.to_a.sort_by { |_, a| -a.rewards }.first(5).each do |name, arm|
+          avg = arm.pulls > 0 ? (arm.rewards / arm.pulls) : 0.0
+          puts sprintf("  %-10s pulls: %-4d reward: %+.2f (avg: %+.2f)", name, arm.pulls, arm.rewards, avg)
+        end
+      end
+    end
+
+    private def handle_session_list
+      sessions = Session.list
+      if sessions.empty?
+        puts "No active sessions found."
+      else
+        puts Opal.style.bold.fg(:cyan).render("=== Active Crowbar Sessions ===")
+        sessions.each do |id|
+          sess = Session.load(id)
+          iter = sess ? sess.iteration : 0
+          base_size = sess ? sess.baseline.size : 0
+          rule = sess ? (sess.active_rules.empty? ? (sess.rule_name || "none") : sess.active_rules.join(", ")) : "none"
+          puts sprintf("  %-10s | Iteration: %-4d | Baseline: %-5d B | Rule: %s", id, iter, base_size, rule)
+        end
+      end
+    end
+
+    private def print_session_help
+      banner = Opal.style.bold.fg(:cyan).render("Crowbar Session System - Stateful Fuzzing & Feedback")
+      puts banner
+      puts "\nUsage: crowbar session <id> <action> [options]"
+      puts ""
+      puts "Actions:"
+      puts "  next              Generate the next mutated item from session baseline"
+      puts "  reward <val>      Provide feedback (-1.0 to 1.0) on the last generated mutant"
+      puts "  setup [options]   Configure active rules, mutator pools, patterns, and scopes"
+      puts "  reset             Reset and delete the session"
+      puts "  status            Display session statistics, iteration count & bandit weights"
+      puts "  list              List all active sessions"
+      puts ""
+      puts "Workflow Examples:"
+      puts "  1. Initialize with input:  \"POST / HTTP/1.1\\r\\n\\r\\n\" | crowbar session 1 next"
+      puts "  2. Reward feedback:        crowbar session 1 reward 0.5   (or -0.5)"
+      puts "  3. Generate next:          crowbar session 1 next > out.txt"
+      puts "  4. Configure session:      crowbar session 1 setup --add-rule mp3 --set-mutators num,bf"
+      puts "  5. Reset session:          crowbar session 1 reset"
+      puts "  6. Reset via new input:    \"NEW INPUT\" | crowbar session 1 next"
     end
   end
 end

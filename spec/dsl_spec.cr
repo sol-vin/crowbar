@@ -140,4 +140,42 @@ describe "Crowbar DSL & Pipeline" do
     mutant = fuzzer.fuzz(csv).to_s
     mutant.should_not eq(csv)
   end
+
+  it "configures rules with custom blocks in the DSL" do
+    fuzzer = Crowbar.define do
+      seed 999_u64
+      http do
+        targets :headers
+        sync_content_length = true
+      end
+    end
+
+    fuzzer.rules.size.should eq(1)
+    rule = fuzzer.rules.first.as(Crowbar::Rules::HTTPRule)
+    rule.targets.should eq([:headers])
+    rule.sync_content_length?.should be_true
+  end
+
+  it "configures rules with preserve block in the DSL" do
+    fuzzer = Crowbar.define do
+      preserve :http do |h|
+        h.targets :headers
+      end
+    end
+
+    fuzzer.rules.size.should eq(1)
+    rule = fuzzer.rules.first.as(Crowbar::Rules::HTTPRule)
+    rule.targets.should eq([:headers])
+  end
+
+  it "supports preserve :ftp and preserve :sql in the DSL" do
+    fuzzer = Crowbar.define do
+      preserve :ftp
+      preserve :sql
+    end
+
+    fuzzer.rules.size.should eq(2)
+    fuzzer.rules[0].name.should eq("ftp")
+    fuzzer.rules[1].name.should eq("sql")
+  end
 end

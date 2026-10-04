@@ -24,9 +24,13 @@ Inspired by the versatility of general-purpose mutation engines and modern prope
 
 ### Key Features
 
-- 🧬 **Feedback-Driven Evolutionary Search (Genetic Algorithm)**: Callers can report execution outcomes (`fuzzer.report(candidate, fitness)`) back to the engine. Uses tournament/roulette selection and crossover recombination to evolve inputs toward maximizing coverage and depth.
-- 🔄 **Anti-Stagnation & Loop Prevention**: Built-in $\epsilon$-greedy exploration rate (guaranteed fresh random inputs) and novelty injection (automatic local minima clearing) prevents the optimizer from locking into repetitive loops.
-- 📐 **Structure-Preserving Rules (10 Formats)**:
+- 🧬 **Feedback-Driven Evolutionary Search (Genetic Algorithm)**: Callers can report execution outcomes (`fuzzer.report(candidate, fitness, feature, coverage_hash)`) back to the engine. Uses tournament/roulette selection, crossover recombination, and anti-stagnation novelty injection.
+- 🎰 **Multi-Armed Bandit (UCB1 Credit Assignment)**: Dynamically rewards mutators and scopes that achieve fitness breakthroughs or uncover new execution states, automatically balancing exploitation with exploration.
+- 🗃️ **Multi-Feature Coverage Bucketing & Novelty Search**: Retains candidates that uncover distinct parser error codes or branch coverage hashes, preventing novel behaviors from being pruned by 1D scalar ranking.
+- 🔤 **Dynamic Vocabulary Harvesting**: Ingests keywords, tokens, and identifiers extracted from target error messages via `fuzzer.harvest(error_text)` into the active mutation dictionary.
+- 📦 **Declarative Protocol Framing (`frame` & `field`)**: Model binary protocol packets declaratively with automatic payload length recalculation (`relates_to: :payload`) and checksum recalculation (`covers: [...]`, e.g. IEEE 802.3 CRC32).
+- 📜 **Context-Free Generative Grammars (`grammar`)**: Generate structured starting seeds (SQL statements, expressions, commands) using weighted production rules with bounded recursion depth.
+- 📐 **Structure-Preserving Rules (18 Formats)**:
   - **`JSON`**: Mutates AST leaf nodes (numbers, strings, booleans, arrays, keys) while guaranteeing 100% syntactically valid JSON output.
   - **`YAML`**: Transforms scalar values and mappings while preserving document hierarchy and indentation.
   - **`HTTP`**: Mutates headers, query strings, and body payloads while maintaining strict RFC 7230 CRLF framing.
@@ -37,6 +41,14 @@ Inspired by the versatility of general-purpose mutation engines and modern prope
   - **`TLV`**: Type-Length-Value frames with length under/over-reporting and tag corruption.
   - **`Base64`**: Transparent decode-mutate-encode Base64 envelope transformations.
   - **`Varint`**: LEB128/Protobuf 7-bit continuation bit integer stream boundaries.
+  - **`FTP`**: RFC 959 command and response streams with CRLF framing, mutating commands (USER, PORT, RETR) and response codes.
+  - **`SQL`**: Structure-preserving SQL statements fuzzing numerics, string literals, clauses, and operators while maintaining parser validity.
+  - **`PNG`**: 8-byte file signature preservation, chunk framing (`IHDR`, `IDAT`, `IEND`), and automated chunk length and CRC32 checksum recalculation.
+  - **`BMP`**: Windows Bitmap preserving 14-byte file header (`BM`) and DIB header, mutating dimensions, bit depths, compression, and pixel rasters.
+  - **`WAV`**: RIFF/WAVE container preservation, `fmt ` subchunk parameter fuzzing (sample rates, channels, bit depths), and PCM waveform mutation.
+  - **`MP3`**: MPEG Layer III preservation of ID3v2 tags and 11-bit MPEG audio frame sync words (`0xFF 0xE0+`), mutating bitrates, sample frequencies, and audio payloads.
+  - **`WAD`**: id Software Doom IWAD/PWAD file container, preserving 12-byte header, 16-byte lump directory table entries, and structured payloads (`THINGS`, `VERTEXES`, `LINEDEFS`, sound/graphics).
+  - **`PDF`**: Adobe Portable Document Format, preserving indirect object framing (`obj ... endobj`), mutating dictionary attributes and stream bodies, with automated `startxref` offset synchronization.
 - 🎯 **Fine-Grained Selectors & Combinators**: Target byte ranges (`scope :header, bytes: 0...16`), columns (`field: 1`), character classes (`chars: :digits`), periodic strides (`stride: 4`), Shannon entropy (`entropy: :high`), or combine with `&`, `|`, and `~`.
 - 🔧 **Post-Transform Fixup Hooks**: Automatically recalculate checksums (CRC32, MD5) or payload length fields after mutating body contents.
 - 🎲 **Deterministic PRNG (Xoshiro256++)**: Fast 64-bit random state seeded for exact, reproducible test cases across platforms.
@@ -118,7 +130,7 @@ bin/crowbar --list
 ```text
 === Crowbar Component Catalog ===
 
-Structure-Preserving Rules (10 Formats):
+Structure-Preserving Rules (18 Formats):
   json       Valid JSON AST with mutated leaf values and bounds
   yaml       Valid YAML document hierarchy with mutated scalars
   http       RFC HTTP/1.x framing with mutated headers, paths, or body
@@ -129,11 +141,119 @@ Structure-Preserving Rules (10 Formats):
   tlv        Type-Length-Value binary packet framing and boundary lengths
   base64     Transparent Base64 envelope decode-mutate-encode
   varint     LEB128/Protobuf 7-bit continuation bit integer streams
+  ftp        RFC 959 FTP command and response streams with CRLF framing
+  sql        Structure-preserving SQL statement with mutated literals & operators
+  png        Portable Network Graphics with automatic chunk framing & CRC32 recalculation
+  bmp        Windows Bitmap (BMP) with header dimensions, compression & pixel rasters
+  wav        RIFF/WAVE audio streams with fmt parameters, channels & PCM samples
+  mp3        MPEG Layer III audio with ID3v2 tags and synchronized frame headers
+  wad        Doom IWAD/PWAD packages with lump directory preservation & struct fuzzing
+  pdf        Portable Document Format with object framing & startxref synchronization
 
 Mutation Patterns:
   od, once   - Mutate once at a single target
   nd, many   - Mutate multiple times with geometric probability decay (default)
   bu, burst  - Mutate in localized burst clusters
+```
+
+### 5. Stateful Sessions & Evolutionary Feedback Loops (`crowbar session`)
+
+When fuzzing complex parsers, feedback loops allow Crowbar to track running memory of actions, successes, and failures using its **Multi-Armed Bandit (UCB1)** and **Genetic Corpus**. The `crowbar session` command enables persistent, stateful iterative workflows across CLI invocations without socket connections or background daemons.
+
+#### Initializing a Session & Auto-Detection
+Pipe an initial baseline file or text into `crowbar session <id> next`. Crowbar automatically detects magic bytes (such as Doom WAD, PDF, MP3 frame sync, PNG signatures, RIFF/WAVE, BMP, HTTP, FTP, or SQL) and attaches the appropriate format rule:
+
+```bash
+# Pipe an MP3 file into a session (auto-detects MP3 frame sync & ID3 rules)
+cat song.mp3 | crowbar session audio next > mutant_01.mp3
+
+# Or pipe an HTTP request
+echo -e "POST /api/upload HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"key\":\"val\"}" | crowbar session 1 next > out.txt
+```
+
+#### Generating Subsequent Mutants
+Once initialized, generate new mutants directly from stored session memory:
+
+```bash
+crowbar session audio next > mutant_02.mp3
+```
+
+#### Providing Feedback (Rewards)
+Reward or penalize the mutators that produced the previous mutant:
+
+```bash
+# Positive feedback (0.0 to 1.0): rewards mutator arms and saves candidate to corpus
+crowbar session audio reward 0.8
+
+# Negative feedback (-1.0 to 0.0): penalizes mutators and prunes candidate
+crowbar session audio reward -0.5
+```
+
+#### Dynamic Session Configuration (`crowbar session <id> setup`)
+Inspect or customize the active rules, mutator pools, patterns, and target scopes for a session:
+
+```bash
+# View active session configuration
+crowbar session audio setup
+
+# Add or remove format rules
+crowbar session audio setup --add-rule mp3
+crowbar session audio setup --auto-rule
+
+# Filter mutator arsenal
+crowbar session audio setup --set-mutators num,bf,wd -p burst
+crowbar session audio setup --add-mutator sr
+
+# Define targeted scopes within the session
+crowbar session audio setup --add-scope head --selector header --params length:32
+crowbar session audio setup --add-scope payload --selector footer --params length:64
+```
+
+#### Checking Status & Listing Sessions
+
+```bash
+# Detailed session metrics, bandit pulls, and top mutators
+crowbar session audio status
+
+# List all active sessions
+crowbar session list
+```
+
+#### Resetting a Session
+
+```bash
+# Explicitly reset and delete session state
+crowbar session audio reset
+
+# Automatic reset: piping a new/different baseline into an existing session ID
+cat new_sample.mp3 | crowbar session audio next > mutant_01.mp3
+```
+
+#### Complete Fuzzing Loop Example (Shell / CI Harness)
+
+```bash
+#!/bin/bash
+# Initialize session with seed file
+cat seed.mp3 | crowbar session fuzzer next > current.mp3
+
+for i in $(seq 1 100); do
+  # Run target parser on the current mutant (zero network sockets touched)
+  ./target_decoder current.mp3 > decoder.log 2>&1
+  EXIT_CODE=$?
+
+  if [ $EXIT_CODE -eq 139 ]; then
+    echo "[!] CRASH DETECTED on iteration $i!"
+    cp current.mp3 "crash_$i.mp3"
+    crowbar session fuzzer reward 1.0
+  elif grep -q "syntax error" decoder.log; then
+    crowbar session fuzzer reward -0.2
+  else
+    crowbar session fuzzer reward 0.4
+  fi
+
+  # Generate next mutant for the next iteration
+  crowbar session fuzzer next > current.mp3
+done
 ```
 
 ---
@@ -234,15 +354,48 @@ baseline = "SELECT id, name FROM users WHERE age > 18"
 end
 ```
 
-**Output:**
-```text
-Baseline Input: SELECT id, name FROM users WHERE age > 18
-Goal: Evolve inputs that maximize length and character diversity
+### 4. Declarative Binary Protocol Framing & Auto-Checksums
 
-Iteration 25: Best Fitness = 515.0 (Size: 810 B)
-Iteration 50: Best Fitness = 661.0 (Size: 1102 B)
-Iteration 75: Best Fitness = 1215.5 (Size: 2191 B)
-Iteration 100: Best Fitness = 2318.0 (Size: 4384 B)
+```crystal
+require "crowbar"
+
+# Declaratively define a binary packet structure:
+# Automatically recalculates payload length and IEEE 802.3 CRC32 whenever payload mutates!
+fuzzer = Crowbar.define do
+  seed 1337_u64
+
+  frame :sensor_packet do
+    field :magic, default: Bytes[0xAA, 0x55], mutate: false
+    field :version, kind: :u8, default: 1_u8, mutate: false
+    field :length, kind: :u16_be, relates_to: :payload
+    field :payload, default: "TEMP=24.5C;PRESSURE=1013HPA"
+    field :checksum, kind: :crc32
+  end
+end
+
+mutant = fuzzer.fuzz_frame(:sensor_packet)
+```
+
+### 5. Context-Free Generative Grammar
+
+```crystal
+require "crowbar"
+
+# Generate structured, syntactically valid starting seeds with bounded recursion:
+fuzzer = Crowbar.define do
+  seed 42_u64
+
+  grammar :query, max_depth: 4 do
+    rule :start, ["SELECT ", :cols, " FROM ", :table]
+    rule :cols, ["*"], weight: 0.2
+    rule :cols, [:col, ", ", :cols], weight: 0.8
+    choices :col, ["id", "username", "email", "balance"]
+    choices :table, ["users", "accounts", "orders"]
+  end
+end
+
+seed_sql = fuzzer.generate(:query)
+puts seed_sql # => SELECT id, balance, * FROM users
 ```
 
 ---
@@ -406,7 +559,7 @@ CRC32: 0x76F3BC89
 
 ## Component Reference
 
-### Structure-Preserving Rules (10 Formats)
+### Structure-Preserving Rules (18 Formats)
 | Rule | Format | Strategy |
 | :--- | :--- | :--- |
 | `json` | JSON Documents | Traverses AST; mutates leaf numbers, strings, keys, and arrays |
@@ -419,6 +572,14 @@ CRC32: 0x76F3BC89
 | `tlv`  | TLV Binary Frames | Mutates Type-Length-Value frames, length fields, and payload bytes |
 | `base64` | Base64 Envelopes | Transparently decodes, applies binary mutations, and re-encodes |
 | `varint` | LEB128 Varints | Mutates 7-bit continuation integers, boundary limits, and overlong bytes |
+| `ftp`  | FTP Streams | Preserves RFC 959 CRLF commands and responses; mutates arguments and codes |
+| `sql`  | SQL Queries | Preserves grammar structure; mutates literals, clauses, and operators |
+| `png`  | PNG Images | Preserves 8-byte signature, chunk framing; recalculates lengths & CRC32 |
+| `bmp`  | Windows Bitmaps | Preserves BM header & DIB header; mutates dimensions, depths & rasters |
+| `wav`  | RIFF/WAVE Audio | Preserves RIFF/fmt headers; mutates audio parameters and PCM samples |
+| `mp3`  | MPEG Layer III | Preserves ID3v2 tags & 11-bit sync words; mutates bitrates and frames |
+| `wad`  | Doom IWAD/PWAD | Preserves 12-byte header, 16-byte lump table; mutates Doom data structs |
+| `pdf`  | PDF Documents | Preserves indirect objects; mutates attributes/streams; syncs `startxref` |
 
 ### Mutation Patterns
 | Pattern | ID | Description |
@@ -427,7 +588,7 @@ CRC32: 0x76F3BC89
 | `many`  | `nd` | Apply one or more mutations with geometric probability decay (default) |
 | `burst` | `bu` | Apply a localized cluster of several changes |
 
-### Mutator Arsenal (30 Tools)
+### Mutator Arsenal (34 Tools)
 | Name | ID | Category | Description |
 | :--- | :--- | :--- | :--- |
 | `ByteDrop` | `bd` | Byte | Drop a single random byte |
@@ -460,6 +621,10 @@ CRC32: 0x76F3BC89
 | `DictionaryMutator` | `dict` | Text | Insert or replace tokens using vocabulary dictionary |
 | `PaddingMutator` | `pad` | Layout | Inject null, whitespace, or alignment padding |
 | `TruncationMutator` | `trunc` | Layout | Truncate buffer at logical line, delimiter, or random offset |
+| `NestingDepth` | `nest` | Robustness | Deeply nest balanced delimiters to test parser recursion depth and stack safety |
+| `LengthBoundary` | `len` | Robustness | Mutate length fields to boundary, off-by-one, or zero values to test allocation limits |
+| `FloatAnomalies` | `flt` | Robustness | Inject IEEE-754 float edge cases (NaN, Infinity, -0.0, subnormals, extreme exponents) |
+| `DelimiterStress` | `delim` | Robustness | Inject unusual line separators, header folding whitespace, and repeated delimiters |
 
 ### Selectors & Combinators
 | Selector | Syntax | Description |

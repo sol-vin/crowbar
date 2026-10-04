@@ -6,6 +6,14 @@ module Crowbar::Rules
   # Parses Start Line, Headers, and Body, maintaining proper CRLF line framing
   # while mutating paths, query parameters, header values, or body content.
   class HTTPRule < Rule
+    property? sync_content_length : Bool = true
+    property targets : Array(Symbol) = [:start_line, :headers, :reorder, :body]
+    property body_rule : Rule? = nil
+
+    def initialize(@weight : Float64 = 1.0, @sync_content_length : Bool = true)
+      super(@weight)
+    end
+
     def name : String
       "http"
     end
@@ -14,12 +22,30 @@ module Crowbar::Rules
       "Structure-preserving HTTP/1.x message mutation (valid framing with mutated headers/body)"
     end
 
+    def targets(*targets : Symbol)
+      @targets = targets.to_a
+    end
+
+    def body_rule(rule : Rule)
+      @body_rule = rule
+    end
+
+    def body_rule(format : Symbol)
+      @body_rule = case format
+                   when :json then JSONRule.new
+                   when :xml  then XMLRule.new
+                   when :yaml then YAMLRule.new
+                   when :csv  then CSVRule.new
+                   else            nil
+                   end
+    end
+
     def match?(buffer : Buffer) : Bool
       str = buffer.to_raw_s
       str.starts_with?("GET ") || str.starts_with?("POST ") ||
         str.starts_with?("PUT ") || str.starts_with?("DELETE ") ||
         str.starts_with?("HEAD ") || str.starts_with?("OPTIONS ") ||
-        str.starts_with?("HTTP/1.")
+        str.starts_with?("PATCH ") || str.starts_with?("HTTP/1.")
     end
 
     def apply(context : Context, buffer : Buffer) : Bool
@@ -34,19 +60,27 @@ module Crowbar::Rules
       start_line = header_lines[0]
       headers = header_lines[1..]
 
-      case context.prng.rand(4)
-      when 0
+      available_targets = @targets.empty? ? [:start_line, :headers, :reorder, :body] : @targets
+      action = context.prng.choice(available_targets)
+
+      case action
+      when :start_line
         # Mutate Start Line (Path / Query string / Method)
         start_line = mutate_start_line(start_line, context)
-      when 1
+      when :headers
         # Mutate Header Values
         headers = mutate_headers(headers, context)
-      when 2
+      when :reorder
         # Duplicate or reorder headers
         headers = duplicate_or_reorder_headers(headers, context)
-      else
+      when :body
         # Mutate Body
         body_section = mutate_body(body_section, context)
+      end
+
+      # Strict protocol adherence: auto-synchronize Content-Length if present
+      if @sync_content_length
+        headers = sync_content_length_header(headers, body_section.bytesize)
       end
 
       # Reconstruct HTTP message with strict CRLF framing
@@ -64,6 +98,16 @@ module Crowbar::Rules
       true
     rescue
       false
+    end
+
+    private def sync_content_length_header(headers : Array(String), body_size : Int32) : Array(String)
+      headers.map do |h|
+        if h =~ /^content-length\s*:/i
+          "Content-Length: #{body_size}"
+        else
+          h
+        end
+      end
     end
 
     private def mutate_start_line(start_line : String, context : Context) : String
@@ -133,6 +177,13 @@ module Crowbar::Rules
     end
 
     private def mutate_body(body : String, context : Context) : String
+      if rule = @body_rule
+        buf = Buffer.new(body)
+        if rule.match?(buf) && rule.apply(context, buf)
+          return buf.to_s
+        end
+      end
+
       return "fuzz_payload" if body.empty?
       case context.prng.rand(3)
       when 0 then ""                             # truncate

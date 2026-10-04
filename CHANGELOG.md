@@ -1,5 +1,37 @@
 # CARBON CHANGELOG
-## [0.1.18] - 2026-10-02
+## [0.1.18] - 2026-10-04
+### ✨ Features & Improvements
+- ✦ Stateful `crowbar session` CLI command system with persistent iteration memory, multi-armed bandit reward feedback, and automatic baseline reset
+- ✦ Dynamic `crowbar session setup` command to configure active rules, mutator pools, execution patterns, and targeted selector scopes
+- ✦ Structure-preserving Doom WAD fuzzer (`WADRule`) preserving 12-byte header, 16-byte lump directory table entries, and structured payloads (THINGS, VERTEXES, LINEDEFS, sound/graphics)
+- ✦ Portable Document Format fuzzer (`PDFRule`) preserving indirect object framing, mutating dictionary attributes and stream bodies, with automated `startxref` offset synchronization
+- ✦ Structure-preserving media format rules for MP3 (ID3v2 tags & MPEG frame sync words), WAV (RIFF container & fmt headers), PNG (chunk framing & auto-CRC32), and BMP (DIB headers & pixel rasters)
+- ✦ Automatic magic-byte and framing format detector (`Crowbar::Detector`) for piped streams across 18 protocols, media, and document formats
+- ✦ RFC 959 FTP CRLF stream fuzzer and structure-preserving SQL AST query transformer
+- ✦ complete overhaul of Crowbar into modern data transformation, structure-preserving mutation, and evolutionary testing framework (`f27db55`)
+- ✦ expand to 10 structure rules, 7 new selectors with combinators, and 9 mutator families (`a860ab0`)
+- ✦ add CLI & DSL tests, 3 runnable protocol fuzzer examples, and example output in README (`331b7b9`)
+
+### 📚 Documentation
+- 📖 add crowbar.gif banner and update component tables in README (`3eae1a6`)
+
+### 🛠️ Chores & Tooling
+- • 1st commit (`4029cc1`)
+- • Readme fix (`32d3894`)
+- • More work, still not functional (`cf3c6f5`)
+- • Working now (`b3af601`)
+- • Added bytes, float to decimal (`361c37c`)
+- • Add  bytes generator, add string and char generators (`4ce4497`)
+- • Playing with weighting system (`bcca163`)
+- • Clean up, fixing read_me (`735df12`)
+- • Fixes to range, regex (`0e2b6c6`)
+- • Added crowbar mutator (`0d8f467`)
+- • Working on xiongmai example fuzzer (`f58e930`)
+- • Updated readme (`d869a4e`)
+- • Updates (`973ca85`)
+
+---
+## [0.1.17] - 2026-10-02
 ### ✨ Features & Improvements
 - ✦ complete overhaul of Crowbar into modern data transformation, structure-preserving mutation, and evolutionary testing framework (`f27db55`)
 - ✦ expand to 10 structure rules, 7 new selectors with combinators, and 9 mutator families (`a860ab0`)

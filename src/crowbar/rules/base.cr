@@ -19,5 +19,9 @@ module Crowbar
 
     # Applies a structure-preserving transformation to the buffer
     abstract def apply(context : Context, buffer : Buffer) : Bool
+
+    # Optional target filtering for format rules supporting selective mutation
+    def targets(*targets : Symbol)
+    end
   end
 end

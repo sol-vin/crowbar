@@ -8,13 +8,16 @@ require "./bit"
 require "./arithmetic"
 require "./text"
 require "./layout"
+require "./stress"
+require "../evolution/bandit"
 
 module Crowbar
   # Registry and adaptive selection engine for mutators.
-  # Selects mutators based on their relative (effective_weight = score * user_weight)
-  # and applies adaptive score feedback based on mutation success.
+  # Supports both adaptive score weighting and UCB1 Multi-Armed Bandit credit assignment.
   class MutatorPool
     getter mutators : Array(Mutator)
+    property bandit : Evolution::Bandit?
+    property use_bandit : Bool = false
 
     def initialize
       @mutators = [] of Mutator
@@ -73,6 +76,12 @@ module Crowbar
       # Layout & Structure mutators
       register(Mutators::PaddingMutator.new)
       register(Mutators::TruncationMutator.new)
+
+      # Parser Robustness & Boundary mutators
+      register(Mutators::NestingDepth.new)
+      register(Mutators::LengthBoundary.new)
+      register(Mutators::FloatAnomalies.new)
+      register(Mutators::DelimiterStress.new)
     end
 
     # Finds mutator by short or full name
@@ -80,10 +89,21 @@ module Crowbar
       @mutators.find { |m| m.name == name }
     end
 
-    # Selects a mutator based on weighted distribution
-    def select_mutator(prng : PRNG) : Mutator
+    # Selects a mutator based on weighted distribution or UCB1 bandit score
+    def select_mutator(prng : PRNG, bandit_override : Evolution::Bandit? = nil) : Mutator
       raise "MutatorPool is empty" if @mutators.empty?
 
+      active_bandit = bandit_override || @bandit
+      if @use_bandit && active_bandit
+        arm_names = @mutators.map(&.name)
+        chosen_name = active_bandit.select(arm_names, prng)
+        active_bandit.record_pull(chosen_name)
+        if m = find?(chosen_name)
+          return m
+        end
+      end
+
+      # Standard weighted roulette
       total_weight = @mutators.sum(&.effective_weight)
       return prng.choice(@mutators) if total_weight <= 0.0
 
@@ -104,8 +124,9 @@ module Crowbar
       buffer : Buffer,
       target_range : Tuple(Int32, Int32)? = nil,
       preferred_mutator : Mutator? = nil,
+      bandit_override : Evolution::Bandit? = nil,
     ) : Bool
-      mutator = preferred_mutator || select_mutator(context.prng)
+      mutator = preferred_mutator || select_mutator(context.prng, bandit_override)
       mutated, delta = mutator.mutate(context, buffer, target_range)
 
       # Adaptive learning: update mutator score

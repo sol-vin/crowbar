@@ -1,9 +1,11 @@
 require "./corpus"
+require "./bandit"
 require "../buffer"
 require "../prng"
 
 module Crowbar::Evolution
-  # Coordinates genetic algorithm feedback, selection, crossover, and anti-stagnation.
+  # Coordinates genetic algorithm feedback, selection, crossover,
+  # Multi-Armed Bandit credit assignment, and anti-stagnation.
   class Manager
     property enabled : Bool = true
     property exploration_rate : Float64 = 0.15 # 15% guaranteed random exploration (anti-locking)
@@ -13,16 +15,28 @@ module Crowbar::Evolution
     property tournament_size : Int32 = 4
 
     getter corpus : Corpus
+    getter bandit : Bandit
+    getter harvested_tokens : Set(String)
+    property last_applied_mutators : Array(String)
+
     getter stagnation_count : Int32 = 0
     getter last_best_fitness : Float64 = -1e9
     getter total_evaluations : Int64 = 0_i64
 
     def initialize(population_size : Int32 = 64)
       @corpus = Corpus.new(population_size)
+      @bandit = Bandit.new
+      @harvested_tokens = Set(String).new
+      @last_applied_mutators = [] of String
     end
 
-    # Report fitness outcome for a candidate (continuous score)
-    def report(data : Buffer | Bytes | String, fitness : Float64)
+    # Report fitness outcome for a candidate (continuous score) with optional feature & coverage telemetry
+    def report(
+      data : Buffer | Bytes | String,
+      fitness : Float64,
+      feature : String? = nil,
+      coverage_hash : UInt64? = nil,
+    )
       return unless @enabled
       @total_evaluations += 1
 
@@ -32,14 +46,74 @@ module Crowbar::Evolution
             else             Buffer.new(data.to_s)
             end
 
-      candidate = Candidate.new(buf.clone, fitness: fitness)
-      @corpus.add(candidate)
+      candidate = Candidate.new(
+        buf.clone,
+        fitness: fitness,
+        mutation_history: @last_applied_mutators.dup,
+        feature: feature,
+        coverage_hash: coverage_hash
+      )
+
+      is_novel = @corpus.add(candidate)
+
+      # Algorithmic credit assignment to mutators that produced this mutant
+      if fitness > @last_best_fitness + 1e-6
+        gain = (fitness - @last_best_fitness).clamp(0.1, 5.0)
+        @last_applied_mutators.each do |mut_name|
+          @bandit.reward(mut_name, gain)
+        end
+      end
+
+      if is_novel
+        # Bonus reward for uncovering novel error categories or unseen coverage hashes
+        @last_applied_mutators.each do |mut_name|
+          @bandit.reward(mut_name, 2.0)
+        end
+      end
+
       check_stagnation
     end
 
     # Report binary success outcome (converted to fitness 1.0 vs 0.0)
-    def report(data : Buffer | Bytes | String, success : Bool)
-      report(data, success ? 1.0 : 0.0)
+    def report(
+      data : Buffer | Bytes | String,
+      success : Bool,
+      feature : String? = nil,
+      coverage_hash : UInt64? = nil,
+    )
+      report(data, success ? 1.0 : 0.0, feature, coverage_hash)
+    end
+
+    # Extracts tokens, identifiers, and hex constants from target error messages
+    def harvest_feedback(text : String) : Array(String)
+      tokens = [] of String
+
+      # 1. Quoted tokens: 'TOKEN' or "TOKEN"
+      text.scan(/['"]([^'"]{2,64})['"]/) do |match|
+        if t = match[1]?
+          tokens << t
+          @harvested_tokens << t
+        end
+      end
+
+      # 2. Hex constants: 0x1234
+      text.scan(/0x[0-9a-fA-F]{2,16}/) do |match|
+        if t = match[0]?
+          tokens << t
+          @harvested_tokens << t
+        end
+      end
+
+      # 3. Delimited words / identifiers (min 3 chars)
+      text.scan(/\b[A-Za-z_][A-Za-z0-9_-]{2,32}\b/) do |match|
+        if t = match[0]?
+          tokens << t
+          @harvested_tokens << t
+        end
+      end
+
+      tokens.uniq!
+      tokens
     end
 
     # Selects or generates the starting parent buffer for the next mutation round

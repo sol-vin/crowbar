@@ -50,8 +50,8 @@ describe "Crowbar CLI & HexDiff" do
 
     it "filters mutator pool according to CLI mutator selections" do
       engine = Crowbar::Engine.new(1234_u64)
-      # Default pool contains all 30 mutators
-      engine.pool.mutators.size.should eq(30)
+      # Default pool contains all 34 mutators
+      engine.pool.mutators.size.should eq(34)
 
       # Filter down to specific list (as done by CLI -m bd,bf)
       engine.pool.mutators.clear
@@ -77,6 +77,14 @@ describe "Crowbar CLI & HexDiff" do
 
       engine.pattern = Crowbar::Patterns::Many.new
       engine.pattern.name.should eq("nd")
+    end
+
+    it "configures ftp and sql rules from CLI selection" do
+      engine = Crowbar::Engine.new(123_u64)
+      engine.add_rule(Crowbar::Rules::FTPRule.new)
+      engine.add_rule(Crowbar::Rules::SQLRule.new)
+
+      engine.rules.map(&.name).should eq(["ftp", "sql"])
     end
   end
 end

@@ -127,6 +127,12 @@ module Crowbar::Mutators
       @tokens = custom_tokens ? custom_tokens.dup : DEFAULT_TOKENS.dup
     end
 
+    def add_tokens(new_tokens : Iterable(String))
+      new_tokens.each do |tok|
+        @tokens << tok unless @tokens.includes?(tok)
+      end
+    end
+
     def name : String
       "dict"
     end

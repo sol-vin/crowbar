@@ -39,7 +39,10 @@ module Crowbar
         pool : MutatorPool,
         target_range : Tuple(Int32, Int32)? = nil,
       ) : Bool
-        pool.mutate(context, buffer, target_range)
+        8.times do
+          return true if pool.mutate(context, buffer, target_range)
+        end
+        false
       end
     end
 
@@ -62,9 +65,14 @@ module Crowbar
         target_range : Tuple(Int32, Int32)? = nil,
       ) : Bool
         mutated_any = false
+        attempts = 0
         loop do
           mutated = pool.mutate(context, buffer, target_range)
           mutated_any ||= mutated
+          attempts += 1
+          if !mutated_any && attempts < 8
+            next
+          end
           break unless context.prng.rand_bool(@decay_probability)
         end
         mutated_any

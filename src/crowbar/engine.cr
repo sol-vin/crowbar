@@ -14,7 +14,18 @@ require "./rules/url"
 require "./rules/tlv"
 require "./rules/base64"
 require "./rules/varint"
+require "./rules/ftp"
+require "./rules/sql"
+require "./rules/png"
+require "./rules/bmp"
+require "./rules/wav"
+require "./rules/mp3"
+require "./rules/wad"
+require "./rules/pdf"
+require "./rules/detector"
 require "./evolution/manager"
+require "./dsl/frame_builder"
+require "./dsl/grammar_builder"
 
 module Crowbar
   # Represents a targeted scope within the pipeline
@@ -45,15 +56,20 @@ module Crowbar
     getter scopes : Array(Scope)
     getter rules : Array(Rule)
     getter fixups : Array(Proc(Buffer, Nil))
+    getter frames : Hash(String, FrameDefinition)
+    getter grammars : Hash(String, GrammarDefinition)
 
     def initialize(seed : UInt64 = PRNG.default_seed)
       @context = Context.new(seed)
       @pool = MutatorPool.new
       @evolution = Evolution::Manager.new
+      @pool.bandit = @evolution.bandit
       @pattern = Patterns::Many.new
       @scopes = [] of Scope
       @rules = [] of Rule
       @fixups = [] of Proc(Buffer, Nil)
+      @frames = Hash(String, FrameDefinition).new
+      @grammars = Hash(String, GrammarDefinition).new
     end
 
     def seed : UInt64
@@ -69,6 +85,7 @@ module Crowbar
     end
 
     def add_scope(scope : Scope)
+      scope.pool.bandit = @evolution.bandit
       @scopes << scope
     end
 
@@ -80,13 +97,74 @@ module Crowbar
       @fixups << block
     end
 
-    # Report feedback to evolutionary optimizer
-    def report(candidate : Buffer | Bytes | String, fitness : Float64)
-      @evolution.report(candidate, fitness)
+    def register_frame(frame : FrameDefinition)
+      @frames[frame.name] = frame
     end
 
-    def report(candidate : Buffer | Bytes | String, success : Bool)
-      @evolution.report(candidate, success)
+    def frame?(name : String | Symbol) : FrameDefinition?
+      @frames[name.to_s]?
+    end
+
+    def register_grammar(grammar : GrammarDefinition)
+      @grammars[grammar.name] = grammar
+    end
+
+    def grammar?(name : String | Symbol) : GrammarDefinition?
+      @grammars[name.to_s]?
+    end
+
+    # Generates a string using a defined generative grammar
+    def generate(name : String | Symbol, start_symbol : Symbol = :start) : String
+      if g = grammar?(name)
+        g.generate(start_symbol, @context.prng)
+      else
+        raise ArgumentError.new("Grammar '#{name}' is not registered")
+      end
+    end
+
+    # Fuzzes a declarative binary frame, automatically recomputing lengths and checksums
+    def fuzz_frame(name : String | Symbol) : Buffer
+      if f = frame?(name)
+        meta = @context.begin_iteration(0)
+        mutated = f.mutate(@context, @pool)
+        meta.output_size = mutated.size
+        @evolution.last_applied_mutators = meta.mutations_applied.dup
+        mutated
+      else
+        raise ArgumentError.new("Frame '#{name}' is not registered")
+      end
+    end
+
+    # Report feedback to evolutionary optimizer with optional feature & coverage hash telemetry
+    def report(
+      candidate : Buffer | Bytes | String,
+      fitness : Float64,
+      feature : String? = nil,
+      coverage_hash : UInt64? = nil,
+    )
+      @evolution.report(candidate, fitness, feature, coverage_hash)
+    end
+
+    def report(
+      candidate : Buffer | Bytes | String,
+      success : Bool,
+      feature : String? = nil,
+      coverage_hash : UInt64? = nil,
+    )
+      @evolution.report(candidate, success, feature, coverage_hash)
+    end
+
+    # Extracts diagnostic tokens from error messages into active dictionary
+    def harvest_feedback(text : String) : Array(String)
+      tokens = @evolution.harvest_feedback(text)
+      if dict = @pool.find?("dict").as?(Mutators::DictionaryMutator)
+        dict.add_tokens(tokens)
+      end
+      tokens
+    end
+
+    def harvest(text : String) : Array(String)
+      harvest_feedback(text)
     end
 
     # Core transform method: transforms an input buffer and returns mutated buffer
@@ -149,6 +227,11 @@ module Crowbar
               end
             end
           end
+
+          # Fallback if no scope mutations succeeded
+          if meta.mutations_applied.empty?
+            @pattern.apply(@context, working, @pool)
+          end
         end
       end
 
@@ -158,12 +241,22 @@ module Crowbar
       end
 
       meta.output_size = working.size
+      @evolution.last_applied_mutators = meta.mutations_applied.dup
       working
     end
 
     # Convenient alias
     def fuzz(input : Buffer | Bytes | String) : Buffer
       transform(input)
+    end
+
+    # Auto-detects format/protocol of the given buffer
+    def self.detect_format?(buffer : Buffer) : Symbol?
+      Detector.detect(buffer)
+    end
+
+    def detect_format?(buffer : Buffer) : Symbol?
+      Detector.detect(buffer)
     end
   end
 end
