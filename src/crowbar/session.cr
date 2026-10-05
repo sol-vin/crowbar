@@ -111,6 +111,10 @@ module Crowbar
     property seen_hashes : Array(UInt64) = [] of UInt64
     @[JSON::Field(emit_null: false)]
     property seek_offset : Int64 = 0_i64
+    @[JSON::Field(emit_null: false)]
+    property input_encoding : String? = nil
+    @[JSON::Field(emit_null: false)]
+    property output_encoding : String? = nil
 
     def initialize(
       @id : String,

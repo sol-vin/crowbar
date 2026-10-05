@@ -46,6 +46,37 @@ module Crowbar
         return :pdf
       end
 
+      # 7-Zip: 37 7A BC AF 27 1C
+      if buffer.size >= 32 && buffer[0, 6].to_slice == Bytes[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]
+        return :seven_zip
+      end
+
+      # ZIP: "PK\x03\x04"
+      if buffer.size >= 30 && buffer[0, 4].to_slice == Bytes[0x50, 0x4B, 0x03, 0x04]
+        return :zip
+      end
+
+      # TAR: "ustar" at offset 257
+      if buffer.size >= 512 && buffer[257, 5].to_slice == "ustar".to_slice
+        return :tar
+      end
+
+      # PCAP capture trace
+      if buffer.size >= 24
+        magic = buffer[0, 4].to_slice
+        if magic == Bytes[0xD4, 0xC3, 0xB2, 0xA1] || magic == Bytes[0xA1, 0xB2, 0xC3, 0xD4]
+          return :packet
+        end
+      end
+
+      # Raw IPv4 packet: Version 4, IHL >= 5, known protocol (TCP 6, UDP 17, ICMP 1)
+      if buffer.size >= 20 && ((buffer[0] >> 4) & 0x0F) == 4 && (buffer[0] & 0x0F) >= 5
+        proto = buffer[9]
+        if proto == 6_u8 || proto == 17_u8 || proto == 1_u8
+          return :packet
+        end
+      end
+
       # DNS wire packet: QDCOUNT >= 1 and <= 10 at offset 4
       if buffer.size >= 12
         qdcount = IO::ByteFormat::BigEndian.decode(UInt16, buffer[4, 2].to_slice) rescue 0_u16
@@ -96,6 +127,11 @@ module Crowbar
         if (trimmed.starts_with?("{") && trimmed.ends_with?("}")) ||
            (trimmed.starts_with?("[") && trimmed.ends_with?("]"))
           return :json
+        end
+
+        # Markdown (CommonMark): headings, links, code blocks, or tables
+        if trimmed.starts_with?("# ") || trimmed.starts_with?("## ") || trimmed.includes?("](") || trimmed.includes?("```") || trimmed.includes?("| ---")
+          return :markdown
         end
 
         # YAML

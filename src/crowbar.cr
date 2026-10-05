@@ -14,6 +14,7 @@ require "./crowbar/template"
 require "./crowbar/engine"
 require "./crowbar/dsl/builder"
 require "./crowbar/session"
+require "./crowbar/encoding"
 
 {% unless flag?(:release) %}
   require "./docs"

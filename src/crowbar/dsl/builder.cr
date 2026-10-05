@@ -15,25 +15,30 @@ module Crowbar
 
     private def create_rule(format : Symbol) : Rule?
       case format
-      when :json            then Rules::JSONRule.new
-      when :yaml, :yml      then Rules::YAMLRule.new
-      when :http            then Rules::HTTPRule.new
-      when :dns             then Rules::DNSRule.new
-      when :csv, :tsv       then Rules::CSVRule.new
-      when :xml, :html      then Rules::XMLRule.new
-      when :url, :uri       then Rules::URLRule.new
-      when :tlv             then Rules::TLVRule.new
-      when :base64, :b64    then Rules::Base64Rule.new
-      when :varint, :leb128 then Rules::VarintRule.new
-      when :ftp             then Rules::FTPRule.new
-      when :sql             then Rules::SQLRule.new
-      when :png             then Rules::PNGRule.new
-      when :bmp             then Rules::BMPRule.new
-      when :wav             then Rules::WAVRule.new
-      when :mp3             then Rules::MP3Rule.new
-      when :wad             then Rules::WADRule.new
-      when :pdf             then Rules::PDFRule.new
-      else                       nil
+      when :json                        then Rules::JSONRule.new
+      when :yaml, :yml                  then Rules::YAMLRule.new
+      when :http                        then Rules::HTTPRule.new
+      when :dns                         then Rules::DNSRule.new
+      when :csv, :tsv                   then Rules::CSVRule.new
+      when :xml, :html                  then Rules::XMLRule.new
+      when :url, :uri                   then Rules::URLRule.new
+      when :tlv                         then Rules::TLVRule.new
+      when :base64, :b64                then Rules::Base64Rule.new
+      when :varint, :leb128             then Rules::VarintRule.new
+      when :ftp                         then Rules::FTPRule.new
+      when :sql                         then Rules::SQLRule.new
+      when :png                         then Rules::PNGRule.new
+      when :bmp                         then Rules::BMPRule.new
+      when :wav                         then Rules::WAVRule.new
+      when :mp3                         then Rules::MP3Rule.new
+      when :wad                         then Rules::WADRule.new
+      when :pdf                         then Rules::PDFRule.new
+      when :seven_zip, :sevenzip, :"7z" then Rules::SevenZipRule.new
+      when :tar, :ustar                 then Rules::TarRule.new
+      when :zip, :pkzip                 then Rules::ZipRule.new
+      when :packet, :ipv4, :pcap        then Rules::PacketRule.new
+      when :markdown, :md               then Rules::MarkdownRule.new
+      else                                   nil
       end
     end
 
@@ -111,6 +116,41 @@ module Crowbar
 
     def pdf(&)
       rule = Rules::PDFRule.new
+      with rule yield rule
+      @scope.add_rule(rule)
+      rule
+    end
+
+    def seven_zip(&)
+      rule = Rules::SevenZipRule.new
+      with rule yield rule
+      @scope.add_rule(rule)
+      rule
+    end
+
+    def tar(&)
+      rule = Rules::TarRule.new
+      with rule yield rule
+      @scope.add_rule(rule)
+      rule
+    end
+
+    def zip(&)
+      rule = Rules::ZipRule.new
+      with rule yield rule
+      @scope.add_rule(rule)
+      rule
+    end
+
+    def packet(&)
+      rule = Rules::PacketRule.new
+      with rule yield rule
+      @scope.add_rule(rule)
+      rule
+    end
+
+    def markdown(&)
+      rule = Rules::MarkdownRule.new
       with rule yield rule
       @scope.add_rule(rule)
       rule
@@ -275,25 +315,30 @@ module Crowbar
 
     private def create_rule(format : Symbol) : Rule?
       case format
-      when :json            then Rules::JSONRule.new
-      when :yaml, :yml      then Rules::YAMLRule.new
-      when :http            then Rules::HTTPRule.new
-      when :dns             then Rules::DNSRule.new
-      when :csv, :tsv       then Rules::CSVRule.new
-      when :xml, :html      then Rules::XMLRule.new
-      when :url, :uri       then Rules::URLRule.new
-      when :tlv             then Rules::TLVRule.new
-      when :base64, :b64    then Rules::Base64Rule.new
-      when :varint, :leb128 then Rules::VarintRule.new
-      when :ftp             then Rules::FTPRule.new
-      when :sql             then Rules::SQLRule.new
-      when :png             then Rules::PNGRule.new
-      when :bmp             then Rules::BMPRule.new
-      when :wav             then Rules::WAVRule.new
-      when :mp3             then Rules::MP3Rule.new
-      when :wad             then Rules::WADRule.new
-      when :pdf             then Rules::PDFRule.new
-      else                       nil
+      when :json                        then Rules::JSONRule.new
+      when :yaml, :yml                  then Rules::YAMLRule.new
+      when :http                        then Rules::HTTPRule.new
+      when :dns                         then Rules::DNSRule.new
+      when :csv, :tsv                   then Rules::CSVRule.new
+      when :xml, :html                  then Rules::XMLRule.new
+      when :url, :uri                   then Rules::URLRule.new
+      when :tlv                         then Rules::TLVRule.new
+      when :base64, :b64                then Rules::Base64Rule.new
+      when :varint, :leb128             then Rules::VarintRule.new
+      when :ftp                         then Rules::FTPRule.new
+      when :sql                         then Rules::SQLRule.new
+      when :png                         then Rules::PNGRule.new
+      when :bmp                         then Rules::BMPRule.new
+      when :wav                         then Rules::WAVRule.new
+      when :mp3                         then Rules::MP3Rule.new
+      when :wad                         then Rules::WADRule.new
+      when :pdf                         then Rules::PDFRule.new
+      when :seven_zip, :sevenzip, :"7z" then Rules::SevenZipRule.new
+      when :tar, :ustar                 then Rules::TarRule.new
+      when :zip, :pkzip                 then Rules::ZipRule.new
+      when :packet, :ipv4, :pcap        then Rules::PacketRule.new
+      when :markdown, :md               then Rules::MarkdownRule.new
+      else                                   nil
       end
     end
 
@@ -371,6 +416,41 @@ module Crowbar
 
     def pdf(&)
       rule = Rules::PDFRule.new
+      with rule yield rule
+      @engine.add_rule(rule)
+      rule
+    end
+
+    def seven_zip(&)
+      rule = Rules::SevenZipRule.new
+      with rule yield rule
+      @engine.add_rule(rule)
+      rule
+    end
+
+    def tar(&)
+      rule = Rules::TarRule.new
+      with rule yield rule
+      @engine.add_rule(rule)
+      rule
+    end
+
+    def zip(&)
+      rule = Rules::ZipRule.new
+      with rule yield rule
+      @engine.add_rule(rule)
+      rule
+    end
+
+    def packet(&)
+      rule = Rules::PacketRule.new
+      with rule yield rule
+      @engine.add_rule(rule)
+      rule
+    end
+
+    def markdown(&)
+      rule = Rules::MarkdownRule.new
       with rule yield rule
       @engine.add_rule(rule)
       rule

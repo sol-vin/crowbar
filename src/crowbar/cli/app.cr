@@ -39,6 +39,9 @@ module Crowbar::CLI
     @unique : Bool = false
     @checksums_capacity : Int32? = nil
     @seek_offset : Int64? = nil
+    @input_encoding : String? = nil
+    @output_encoding : String? = nil
+    @inline_data : String? = nil
     @input_files : Array(String) = [] of String
 
     def initialize(
@@ -89,6 +92,8 @@ module Crowbar::CLI
           unique: @unique,
           checksums_capacity: @checksums_capacity,
           seek_offset: @seek_offset,
+          input_encoding: @input_encoding,
+          output_encoding: @output_encoding,
         )
         session_idx = remaining.index("session").not_nil!
         sub_args = remaining[(session_idx + 1)..]
@@ -151,6 +156,18 @@ module Crowbar::CLI
 
         opts.on("-S OFFSET", "--seek OFFSET", "Fast-forward PRNG state by OFFSET iterations") do |s|
           @seek_offset = s.to_i64
+        end
+
+        opts.on("-I FORMAT", "--in-format FORMAT", "Input representation format (hex, escape, bit, base64, auto, raw)") do |i_fmt|
+          @input_encoding = i_fmt
+        end
+
+        opts.on("-O FORMAT", "--out-format FORMAT", "Output representation format (hex, escape, bit, base64, raw)") do |o_fmt|
+          @output_encoding = o_fmt
+        end
+
+        opts.on("-D DATA", "--data DATA", "Inline input payload string directly from CLI") do |d|
+          @inline_data = d
         end
 
         opts.on("-d", "--diff", "Display Opal TrueColor terminal hex diff") do
@@ -270,11 +287,8 @@ module Crowbar::CLI
 
         if @show_diff
           HexDiff.render(input_buffer, mutated, @out_io)
-        elsif pattern = @output_pattern
-          write_output(pattern, mutated, iteration)
         else
-          # Default: emit mutated bytes to out_io
-          @out_io.write(mutated.to_slice)
+          emit_output(mutated, iteration)
         end
 
         break if @count > 0 && iteration >= @count
@@ -283,28 +297,48 @@ module Crowbar::CLI
     end
 
     private def read_input : Buffer
-      if !@input_files.empty?
-        # Read from first sample file (or concatenate)
-        file_path = @input_files.first
-        if File.exists?(file_path)
-          Buffer.new(File.read(file_path))
-        else
-          err_puts "Error: File '#{file_path}' does not exist"
-          do_exit(1)
-          Buffer.new
-        end
+      raw_buf = if data = @inline_data
+                  Buffer.new(data)
+                elsif !@input_files.empty?
+                  file_path = @input_files.first
+                  if File.exists?(file_path)
+                    Buffer.new(File.read(file_path))
+                  elsif @input_encoding
+                    # Treat positional argument as inline encoded payload
+                    Buffer.new(file_path)
+                  else
+                    err_puts "Error: File '#{file_path}' does not exist"
+                    do_exit(1)
+                    Buffer.new
+                  end
+                else
+                  # Read from input IO
+                  Buffer.from_io(@in_io)
+                end
+
+      if enc = @input_encoding
+        Encoding.decode(raw_buf, enc)
       else
-        # Read from input IO
-        Buffer.from_io(@in_io)
+        raw_buf
       end
     end
 
-    private def write_output(pattern : String, buffer : Buffer, iteration : Int32)
-      if pattern == "-"
-        @out_io.write(buffer.to_slice)
+    private def emit_output(buffer : Buffer, iteration : Int32)
+      payload = if enc = @output_encoding
+                  Encoding.encode(buffer, enc).to_slice
+                else
+                  buffer.to_slice
+                end
+
+      if pattern = @output_pattern
+        if pattern == "-"
+          @out_io.write(payload)
+        else
+          filename = pattern.gsub("%n", iteration.to_s)
+          File.write(filename, payload)
+        end
       else
-        filename = pattern.gsub("%n", iteration.to_s)
-        File.write(filename, buffer.to_slice)
+        @out_io.write(payload)
       end
     end
 
@@ -396,6 +430,33 @@ module Crowbar::CLI
         when "-S", "--seek"
           if i + 1 < args.size
             @seek_offset = args[i + 1].to_i64? || 0_i64
+            i += 2
+            next
+          else
+            remaining << arg
+            i += 1
+          end
+        when "-I", "--in-format", "--input-encoding", "--input-format"
+          if i + 1 < args.size
+            @input_encoding = args[i + 1]
+            i += 2
+            next
+          else
+            remaining << arg
+            i += 1
+          end
+        when "-O", "--out-format", "--output-encoding", "--output-format"
+          if i + 1 < args.size
+            @output_encoding = args[i + 1]
+            i += 2
+            next
+          else
+            remaining << arg
+            i += 1
+          end
+        when "-D", "--data", "--payload"
+          if i + 1 < args.size
+            @inline_data = args[i + 1]
             i += 2
             next
           else

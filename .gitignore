@@ -4,3 +4,6 @@
 /.shards/
 /.crystal_cache/
 *.dwarf
+*.dll
+*.exe
+*.pdb

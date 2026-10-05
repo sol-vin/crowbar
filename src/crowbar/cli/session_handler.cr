@@ -26,6 +26,8 @@ module Crowbar::CLI
     property unique : Bool
     property checksums_capacity : Int32?
     property seek_offset : Int64?
+    property input_encoding : String?
+    property output_encoding : String?
 
     def initialize(
       @in_io : IO,
@@ -43,6 +45,8 @@ module Crowbar::CLI
       @unique : Bool = false,
       @checksums_capacity : Int32? = nil,
       @seek_offset : Int64? = nil,
+      @input_encoding : String? = nil,
+      @output_encoding : String? = nil,
     )
     end
 
@@ -134,30 +138,15 @@ module Crowbar::CLI
     end
 
     private def handle_session_next(session_id : String, sub_flags : Array(String) = [] of String)
-      piped = read_piped_stdin
-      session = if Session.exists?(session_id)
-                  sess = Session.load(session_id).not_nil!
-                  if piped && piped != sess.baseline
-                    sess.reset_with(piped, @selected_rule, @selected_pattern, @selected_mutations, @seed)
-                    sess.save
-                  end
-                  sess
-                else
-                  if piped.nil?
-                    err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
-                    err_puts "Pipe initial data to start the session:"
-                    err_puts "  echo 'sample' | crowbar session #{session_id} next"
-                    do_exit(1)
-                    return
-                  end
-                  Session.load_or_create(session_id, piped, @selected_rule, @selected_pattern, @selected_mutations, @seed)
-                end
-
       req_unique = @unique
       req_seek = @seek_offset
       req_template = @template
+      req_in_encoding = @input_encoding
+      req_out_encoding = @output_encoding
       out_pattern = @output_pattern
       diff_mode = @show_diff
+      req_mutations : Array(String)? = nil
+      req_capacity : Int32? = nil
 
       i = 0
       while i < sub_flags.size
@@ -180,11 +169,23 @@ module Crowbar::CLI
           else
             i += 1
           end
+        when "-I", "--in-format", "--input-encoding", "--input-format"
+          if i + 1 < sub_flags.size
+            req_in_encoding = sub_flags[i + 1]
+            i += 2
+          else
+            i += 1
+          end
+        when "-O", "--out-format", "--output-encoding", "--output-format"
+          if i + 1 < sub_flags.size
+            req_out_encoding = sub_flags[i + 1]
+            i += 2
+          else
+            i += 1
+          end
         when "-C", "--checksums"
           if i + 1 < sub_flags.size
-            if cap = sub_flags[i + 1].to_i?
-              session.uniqueness_capacity = cap
-            end
+            req_capacity = sub_flags[i + 1].to_i?
             i += 2
           else
             i += 1
@@ -201,7 +202,7 @@ module Crowbar::CLI
           end
         when "-m", "--mutations"
           if i + 1 < sub_flags.size
-            session.set_mutators(sub_flags[i + 1].split(","))
+            req_mutations = sub_flags[i + 1].split(",")
             i += 2
           else
             i += 1
@@ -211,23 +212,69 @@ module Crowbar::CLI
         end
       end
 
+      piped_raw = read_piped_stdin
+      existing_sess = Session.exists?(session_id) ? Session.load(session_id) : nil
+      effective_in = req_in_encoding || existing_sess.try(&.input_encoding)
+      piped = if piped_raw && effective_in
+                Encoding.decode(piped_raw, effective_in)
+              else
+                piped_raw
+              end
+
+      session = if existing_sess
+                  sess = existing_sess
+                  if piped && piped != sess.baseline
+                    sess.reset_with(piped, @selected_rule, @selected_pattern, @selected_mutations, @seed)
+                    sess.save
+                  end
+                  sess
+                else
+                  if piped.nil?
+                    err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
+                    err_puts "Pipe initial data to start the session:"
+                    err_puts "  echo 'sample' | crowbar session #{session_id} next"
+                    do_exit(1)
+                    return
+                  end
+                  Session.load_or_create(session_id, piped, @selected_rule, @selected_pattern, @selected_mutations, @seed)
+                end
+
+      if in_enc = req_in_encoding
+        session.input_encoding = in_enc
+      end
+      if out_enc = req_out_encoding
+        session.output_encoding = out_enc
+      end
+      if cap = req_capacity
+        session.uniqueness_capacity = cap
+      end
+      if muts = req_mutations
+        session.set_mutators(muts)
+      end
+
       mutated = session.next_mutant(
         unique: req_unique ? true : nil,
         seek: req_seek,
         template_override: req_template
       )
 
+      payload = if enc = req_out_encoding || session.output_encoding
+                  Encoding.encode(mutated, enc).to_slice
+                else
+                  mutated.to_slice
+                end
+
       if diff_mode
         HexDiff.render(session.baseline, mutated, @out_io)
       elsif pattern = out_pattern
         if pattern == "-"
-          @out_io.write(mutated.to_slice)
+          @out_io.write(payload)
         else
           filename = pattern.gsub("%n", session.iteration.to_s)
-          File.write(filename, mutated.to_slice)
+          File.write(filename, payload)
         end
       else
-        @out_io.write(mutated.to_slice)
+        @out_io.write(payload)
       end
     end
 
@@ -368,6 +415,8 @@ module Crowbar::CLI
           "uniqueness_capacity" => session.uniqueness_capacity,
           "seen_hashes_count"   => session.seen_hashes.size,
           "seek_offset"         => session.seek_offset,
+          "input_encoding"      => session.input_encoding,
+          "output_encoding"     => session.output_encoding,
         }
         puts data.to_pretty_json
         return
@@ -391,6 +440,12 @@ module Crowbar::CLI
       puts "#{label_style.render("Unique Filter:")} #{uniq_str}"
       if session.seek_offset != 0
         puts "#{label_style.render("Seek Offset:")}   #{session.seek_offset}"
+      end
+      if in_enc = session.input_encoding
+        puts "#{label_style.render("In Format:")}   #{in_enc}"
+      end
+      if out_enc = session.output_encoding
+        puts "#{label_style.render("Out Format:")}  #{out_enc}"
       end
       if !session.scopes.empty?
         puts "#{label_style.render("Scopes:")}    #{session.scopes.size} configured"
@@ -458,13 +513,25 @@ module Crowbar::CLI
         return
       end
 
-      if sub_args.empty? && @selected_rule.nil? && @selected_pattern.nil? && @selected_mutations.nil? && @template.nil? && !@unique && @seek_offset.nil? && @checksums_capacity.nil?
+      if sub_args.empty? && @selected_rule.nil? && @selected_pattern.nil? && @selected_mutations.nil? && @template.nil? && !@unique && @seek_offset.nil? && @checksums_capacity.nil? && @input_encoding.nil? && @output_encoding.nil?
         display_session_setup_status(session)
         return
       end
 
       i = 0
       modified = false
+
+      if in_enc = @input_encoding
+        session.input_encoding = in_enc
+        puts Opal.style.fg(:green).render("Set input encoding to '#{in_enc}' for session #{session_id}")
+        modified = true
+      end
+
+      if out_enc = @output_encoding
+        session.output_encoding = out_enc
+        puts Opal.style.fg(:green).render("Set output encoding to '#{out_enc}' for session #{session_id}")
+        modified = true
+      end
 
       if r = @selected_rule
         session.add_rule(r)
@@ -635,6 +702,32 @@ module Crowbar::CLI
           puts Opal.style.fg(:yellow).render("Cleared uniqueness seen hashes for session #{session_id}")
           modified = true
           i += 1
+        when "--in-format", "--input-encoding", "-I", "--input-format"
+          if i + 1 < sub_args.size
+            fmt = sub_args[i + 1]
+            session.input_encoding = fmt
+            puts Opal.style.fg(:green).render("Set input encoding to '#{fmt}' for session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--out-format", "--output-encoding", "-O", "--output-format"
+          if i + 1 < sub_args.size
+            fmt = sub_args[i + 1]
+            session.output_encoding = fmt
+            puts Opal.style.fg(:green).render("Set output encoding to '#{fmt}' for session #{session_id}")
+            modified = true
+            i += 2
+          else
+            i += 1
+          end
+        when "--clear-encodings", "--reset-encodings"
+          session.input_encoding = nil
+          session.output_encoding = nil
+          puts Opal.style.fg(:yellow).render("Cleared input/output encodings for session #{session_id}")
+          modified = true
+          i += 1
         when "--pattern", "-p"
           if i + 1 < sub_args.size
             p = sub_args[i + 1]
@@ -733,6 +826,12 @@ module Crowbar::CLI
       puts "#{label_style.render("Unique Filter:")}   #{uniq_str}"
       if session.seek_offset != 0
         puts "#{label_style.render("Seek Offset:")}     #{session.seek_offset}"
+      end
+      if in_enc = session.input_encoding
+        puts "#{label_style.render("In Format:")}       #{in_enc}"
+      end
+      if out_enc = session.output_encoding
+        puts "#{label_style.render("Out Format:")}      #{out_enc}"
       end
       if session.scopes.empty?
         puts "#{label_style.render("Scopes:")}          None (whole buffer mutation)"

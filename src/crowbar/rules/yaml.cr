@@ -24,6 +24,35 @@ module Crowbar::Rules
 
     def apply(context : Context, buffer : Buffer) : Bool
       raw_str = buffer.to_s
+
+      # Check for YAML frontmatter block: starts with --- and has closing --- before body
+      if raw_str.starts_with?("---")
+        lines = raw_str.split("\n")
+        closing_idx = -1
+        lines.each_with_index do |line, idx|
+          if idx > 0 && line.strip == "---"
+            closing_idx = idx
+            break
+          end
+        end
+
+        if closing_idx > 0
+          fm_content = lines[1...closing_idx].join("\n")
+          rest_content = lines[(closing_idx + 1)..].join("\n")
+          begin
+            parsed = YAML.parse(fm_content)
+            mutated_raw = mutate_node(parsed.raw, context)
+            new_fm = mutated_raw.to_yaml.strip
+            new_doc = "---\n" + new_fm + "\n---\n" + rest_content
+            buffer.replace_range(0, buffer.size, new_doc.to_slice)
+            context.record_mutation(name)
+            return true
+          rescue
+            # Fall through to full document parsing
+          end
+        end
+      end
+
       parsed = YAML.parse(raw_str)
       mutated_raw = mutate_node(parsed.raw, context)
 
@@ -74,10 +103,16 @@ module Crowbar::Rules
     end
 
     private def mutate_string(val : String, context : Context) : YAML::Any::Type
-      case context.prng.rand(4)
+      case context.prng.rand(6)
       when 0 then ""
       when 1 then "A" * context.prng.rand_log(8)
       when 2 then "\u202E" + val
+      when 3
+        # Anchor and alias probe
+        context.prng.choice(["&ref_anchor payload", "*ref_anchor", "<<: *defaults"])
+      when 4
+        # Tag and special YAML scalar probe
+        context.prng.choice(["!binary SGVsbG8=", "!!null", "!!str test", "true", "false", "~", "null"])
       else
         context.prng.choice(Mutators::BoundaryNumbers::BOUNDARIES)
       end

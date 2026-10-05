@@ -17,6 +17,11 @@ require "./wav"
 require "./mp3"
 require "./wad"
 require "./pdf"
+require "./seven_zip"
+require "./tar"
+require "./zip"
+require "./packet"
+require "./markdown"
 
 module Crowbar::Rules
   # Metadata and factory definition for a registered structure rule
@@ -100,6 +105,11 @@ module Crowbar::Rules
   Registry.register("mp3", "MPEG Layer III audio with ID3v2 tags and synchronized frame headers", [] of String) { MP3Rule.new }
   Registry.register("wad", "Doom WAD directory tables, lump metadata, and THINGS/LINEDEFS payloads", [] of String) { WADRule.new }
   Registry.register("pdf", "Portable Document Format (PDF) objects, dictionaries, streams & xrefs", [] of String) { PDFRule.new }
+  Registry.register("7z", "7-Zip archive framing with automated StartHeader CRC32 fixup", ["sevenzip", "7zip", "seven_zip"]) { SevenZipRule.new }
+  Registry.register("tar", "POSIX UStar TAR archive framing with automated octal checksum fixup", ["ustar"]) { TarRule.new }
+  Registry.register("zip", "PKZip archive framing with automated length and CRC32 fixup", ["pkzip"]) { ZipRule.new }
+  Registry.register("packet", "Raw IPv4, TCP, UDP, and PCAP framing with RFC checksum fixups", ["ipv4", "tcp", "udp", "pcap", "rawpacket"]) { PacketRule.new }
+  Registry.register("markdown", "CommonMark/Markdown documents with link, table, heading & fence mutations", ["md", "commonmark"]) { MarkdownRule.new }
 end
 
 module Crowbar
