@@ -319,24 +319,36 @@ module Crowbar::CLI
             @selected_rule = args[i + 1]
             i += 2
             next
+          else
+            remaining << arg
+            i += 1
           end
         when "-s", "--seed"
           if i + 1 < args.size
             @seed = args[i + 1].to_u64? || args[i + 1].hash.to_u64
             i += 2
             next
+          else
+            remaining << arg
+            i += 1
           end
         when "-p", "--patterns", "--pattern"
           if i + 1 < args.size
             @selected_pattern = args[i + 1]
             i += 2
             next
+          else
+            remaining << arg
+            i += 1
           end
         when "-m", "--mutations"
           if i + 1 < args.size
             @selected_mutations = args[i + 1]
             i += 2
             next
+          else
+            remaining << arg
+            i += 1
           end
         when "-d", "--diff"
           @show_diff = true
@@ -355,12 +367,18 @@ module Crowbar::CLI
             @output_pattern = args[i + 1]
             i += 2
             next
+          else
+            remaining << arg
+            i += 1
           end
         when "-t", "--template"
           if i + 1 < args.size
             @template = args[i + 1]
             i += 2
             next
+          else
+            remaining << arg
+            i += 1
           end
         when "-u", "--unique"
           @unique = true
@@ -371,12 +389,18 @@ module Crowbar::CLI
             @checksums_capacity = args[i + 1].to_i? || 10_000
             i += 2
             next
+          else
+            remaining << arg
+            i += 1
           end
         when "-S", "--seek"
           if i + 1 < args.size
             @seek_offset = args[i + 1].to_i64? || 0_i64
             i += 2
             next
+          else
+            remaining << arg
+            i += 1
           end
         else
           remaining << arg

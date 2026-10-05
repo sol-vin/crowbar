@@ -38,20 +38,27 @@ module Crowbar::Rules
       fmt_chunk = chunks.find { |c| c.id == "fmt " }
       data_chunk = chunks.find { |c| c.id == "data" }
 
+      has_samples = data_chunk && data_chunk.size > 0
+      has_fmt = fmt_chunk && fmt_chunk.size >= 16
+
       action = context.prng.rand(4)
       mutated = false
 
       case action
       when 0
-        # Mutate format parameters in fmt subchunk
-        if fmt_chunk && fmt_chunk.size >= 16
-          mutate_fmt_chunk(fmt_chunk, buffer, context)
+        if has_fmt
+          mutate_fmt_chunk(fmt_chunk.not_nil!, buffer, context)
+          mutated = true
+        elsif has_samples
+          mutate_data_samples(data_chunk.not_nil!, buffer, context)
           mutated = true
         end
       when 1
-        # Mutate PCM audio sample data in data subchunk
-        if data_chunk && data_chunk.size > 0
-          mutate_data_samples(data_chunk, buffer, context)
+        if has_samples
+          mutate_data_samples(data_chunk.not_nil!, buffer, context)
+          mutated = true
+        elsif has_fmt
+          mutate_fmt_chunk(fmt_chunk.not_nil!, buffer, context)
           mutated = true
         end
       when 2
@@ -63,9 +70,8 @@ module Crowbar::Rules
           mutated = true
         end
       else
-        # Mutate arbitrary subchunk bytes or data bytes
-        target = data_chunk || fmt_chunk
-        if target && target.size > 0
+        target = has_samples ? data_chunk : (has_fmt ? fmt_chunk : nil)
+        if target
           mutate_data_samples(target, buffer, context)
           mutated = true
         end
