@@ -96,6 +96,11 @@ module Crowbar
       @mutators.find { |m| m.name.downcase == clean || m.aliases.map(&.downcase).includes?(clean) }
     end
 
+    # Finds mutator by name or raises an exception
+    def find!(name : String) : Mutator
+      find?(name) || raise KeyError.new("Mutator not found: #{name}")
+    end
+
     # Selects a mutator based on weighted distribution or UCB1 bandit score
     def select_mutator(prng : PRNG, bandit_override : Evolution::Bandit? = nil) : Mutator
       raise "MutatorPool is empty" if @mutators.empty?

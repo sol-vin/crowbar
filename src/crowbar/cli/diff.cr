@@ -84,5 +84,66 @@ module Crowbar::CLI
 
       io.puts dim_style.render("-" * 64)
     end
+
+    # Renders up to max_lines of diff lines for TUI or constrained viewports
+    def self.render_lines(original : Buffer, mutated : Buffer, max_lines : Int32 = 20) : Array(String)
+      lines = [] of String
+      diff_style = Opal.style.bold.fg(:yellow)
+      orig_byte_style = Opal.style.fg(:red)
+      mut_byte_style = Opal.style.bold.fg(:green)
+      dim_style = Opal.style.fg(:bright_black)
+
+      max_size = [original.size, mutated.size].max
+      chunk_size = 16
+
+      (0...max_size).step(chunk_size) do |offset|
+        break if lines.size >= max_lines
+
+        row_has_diff = false
+        (0...chunk_size).each do |i|
+          idx = offset + i
+          if original[idx]? != mutated[idx]?
+            row_has_diff = true
+            break
+          end
+        end
+
+        row_io = IO::Memory.new
+        row_prefix = sprintf("%06X: ", offset)
+        row_io.print(row_has_diff ? diff_style.render(row_prefix) : dim_style.render(row_prefix))
+
+        (0...chunk_size).each do |i|
+          idx = offset + i
+          b_orig = original[idx]?
+          b_mut = mutated[idx]?
+
+          if b_mut
+            hex_str = sprintf("%02X ", b_mut)
+            row_io.print(b_orig != b_mut ? mut_byte_style.render(hex_str) : hex_str)
+          else
+            row_io.print "   "
+          end
+          row_io.print " " if i == 7
+        end
+
+        row_io.print " |"
+        (0...chunk_size).each do |i|
+          idx = offset + i
+          b_orig = original[idx]?
+          b_mut = mutated[idx]?
+
+          if b_mut
+            char_str = (b_mut >= 32 && b_mut <= 126) ? b_mut.unsafe_chr.to_s : "."
+            row_io.print(b_orig != b_mut ? mut_byte_style.render(char_str) : char_str)
+          else
+            row_io.print " "
+          end
+        end
+        row_io.print "|"
+        lines << row_io.to_s
+      end
+
+      lines
+    end
   end
 end

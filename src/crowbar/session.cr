@@ -1,8 +1,10 @@
 require "json"
 require "base64"
+require "file_utils"
 require "./buffer"
 require "./engine"
 require "./evolution/manager"
+require "./session_item"
 
 module Crowbar
   # Serializable state for a multi-armed bandit mutator arm
@@ -115,6 +117,10 @@ module Crowbar
     property input_encoding : String? = nil
     @[JSON::Field(emit_null: false)]
     property output_encoding : String? = nil
+    @[JSON::Field(emit_null: false)]
+    property items : Array(SessionItem) = [] of SessionItem
+    @[JSON::Field(emit_null: false)]
+    property item_retention : Int32 = 100
 
     def initialize(
       @id : String,
@@ -141,6 +147,8 @@ module Crowbar
         @active_rules << r unless r.empty?
       end
       @scopes = [] of ScopeConfig
+      @items = [] of SessionItem
+      @item_retention = 100
     end
 
     def self.default_dir : String
@@ -149,6 +157,14 @@ module Crowbar
 
     def self.session_path(id : String, dir : String = default_dir) : String
       File.join(dir, "#{id}.json")
+    end
+
+    def self.items_dir(id : String, dir : String = default_dir) : String
+      File.join(dir, id, "items")
+    end
+
+    def items_dir(dir : String = Session.default_dir) : String
+      Session.items_dir(@id, dir)
     end
 
     def self.exists?(id : String, dir : String = default_dir) : Bool
@@ -251,6 +267,9 @@ module Crowbar
       @last_mutators.clear
       @last_reward = nil
       @corpus_items.clear
+      @items.clear
+      i_dir = items_dir
+      FileUtils.rm_rf(i_dir) if Dir.exists?(i_dir)
       @history << HistoryEntry.new(@iteration, "reset")
       @updated_at = Time.utc
     end
@@ -423,6 +442,38 @@ module Crowbar
       self.last_mutant = mutated
       @last_mutators = engine.evolution.last_applied_mutators.dup
 
+      # Calculate byte-level diff count against baseline
+      base_buf = baseline
+      diff_c = 0
+      min_sz = [base_buf.size, mutated.size].min
+      min_sz.times do |idx|
+        diff_c += 1 if base_buf[idx] != mutated[idx]
+      end
+      diff_c += (mutated.size - base_buf.size).abs
+
+      # Save item binary to disk
+      rel_item_path = File.join(@id, "items", "#{@iteration}.bin")
+      abs_item_path = File.join(dir, rel_item_path)
+      FileUtils.mkdir_p(File.dirname(abs_item_path))
+      File.write(abs_item_path, mutated.to_slice)
+
+      # Record session item with steps
+      captured_steps = engine.last_metadata.try(&.steps.dup) || [] of TransformationStep
+      item_seed = @seed &+ @iteration.to_u64 &+ @seek_offset.to_u64
+      @items << SessionItem.new(
+        iteration: @iteration,
+        size: mutated.size,
+        diff_count: diff_c,
+        mutators: @last_mutators.dup,
+        steps: captured_steps,
+        seed: item_seed,
+        seek_offset: @seek_offset,
+        reward: nil,
+        file_path: rel_item_path
+      )
+
+      prune_excess_items(dir)
+
       # Sync uniqueness hashes back to session
       if filter = engine.uniqueness_filter
         @seen_hashes = filter.to_a
@@ -452,42 +503,138 @@ module Crowbar
       mutated
     end
 
-    # Applies feedback score (-1.0 to 1.0) to the last generated mutant and mutators
-    def reward(value : Float64, dir : String = Session.default_dir) : Session
-      raise ArgumentError.new("Session has no previous mutant to reward. Run 'next' first.") if @last_mutators.empty?
+    # Applies feedback score (-1.0 to 1.0) with custom directory override
+    def reward(value : Float64, dir : String) : Session
+      reward(value, iteration: nil, dir: dir)
+    end
 
-      # 1. Update bandit credit for the mutators that produced the last mutant
-      @last_mutators.each do |mut_name|
+    # Applies feedback score (-1.0 to 1.0) to a specific generated mutant (default: latest)
+    def reward(value : Float64, iteration : Int32? = nil, dir : String = Session.default_dir) : Session
+      target_iter = iteration || @iteration
+      target_item = @items.find { |i| i.iteration == target_iter }
+
+      target_muts = if target_item
+                      target_item.mutators
+                    elsif target_iter == @iteration
+                      @last_mutators
+                    else
+                      raise ArgumentError.new("Iteration #{target_iter} not found in session '#{@id}'")
+                    end
+
+      if target_muts.empty?
+        raise ArgumentError.new("Session has no previous mutators to reward for iteration #{target_iter}. Run 'next' first.")
+      end
+
+      # 1. Update bandit credit for the mutators that produced the target mutant
+      target_muts.uniq.each do |mut_name|
         current_arm = @arms[mut_name]? || ArmState.new
         current_arm.rewards += value
         @arms[mut_name] = current_arm
       end
 
       # 2. Update corpus: positive feedback adds candidate, negative feedback prunes
+      target_mutant = get_mutant(target_iter, dir)
       if value >= 0.0
-        if mutant = last_mutant
+        if mutant = target_mutant
           cand_b64 = Base64.strict_encode(mutant.to_slice)
-          # Add or update candidate in corpus
           @corpus_items.reject! { |c| c.buffer_b64 == cand_b64 }
           @corpus_items << CandidateState.new(
             cand_b64,
             fitness: value,
-            generation: @iteration.to_i64,
-            mutation_history: @last_mutators.dup
+            generation: target_iter.to_i64,
+            mutation_history: target_muts.dup
           )
         end
       else
-        if mutant = last_mutant
+        if mutant = target_mutant
           cand_b64 = Base64.strict_encode(mutant.to_slice)
           @corpus_items.reject! { |c| c.buffer_b64 == cand_b64 }
         end
       end
 
-      @last_reward = value
-      @history << HistoryEntry.new(@iteration, "reward", @last_mutators, value)
+      # 3. Update target item reward status
+      if target_item
+        target_item.reward = value
+      end
+
+      if target_iter == @iteration
+        @last_reward = value
+      end
+
+      @history << HistoryEntry.new(target_iter, "reward", target_muts, value)
       @updated_at = Time.utc
       save(dir)
       self
+    end
+
+    # Retrieves a SessionItem by iteration number
+    def get_item(iter : Int32) : SessionItem?
+      @items.find { |i| i.iteration == iter }
+    end
+
+    # Retrieves the mutant buffer for an iteration (from disk cache or deterministic replay)
+    def get_mutant(iter : Int32, dir : String = Session.default_dir) : Buffer?
+      if item = get_item(iter)
+        if rel_path = item.file_path
+          full_path = File.join(dir, rel_path)
+          if File.exists?(full_path)
+            return Buffer.new(File.read(full_path).to_slice)
+          end
+        end
+      end
+
+      if iter == @iteration && (m = last_mutant)
+        return m
+      end
+
+      begin
+        mutant, _ = replay(iter)
+        mutant
+      rescue
+        nil
+      end
+    end
+
+    # Deterministically replays and reconstructs an iteration from baseline
+    def replay(iter : Int32) : Tuple(Buffer, Array(TransformationStep))
+      item = get_item(iter)
+      unless item
+        raise ArgumentError.new("Iteration #{iter} not found in session '#{@id}'")
+      end
+
+      engine = build_engine
+      engine.seed = item.seed
+      engine.seek(item.seek_offset) if item.seek_offset > 0
+
+      unless item.mutators.empty?
+        engine.pool.mutators.clear
+        pool = MutatorPool.new
+        item.mutators.each do |n|
+          if m = pool.find?(n)
+            engine.pool.register(m)
+          end
+        end
+      end
+
+      replayed = engine.transform(baseline)
+      steps = engine.last_metadata.try(&.steps.dup) || item.steps
+      {replayed, steps}
+    end
+
+    private def prune_excess_items(dir : String)
+      return if @item_retention <= 0 || @items.size <= @item_retention
+      excess_count = @items.size - @item_retention
+      pruned = 0
+      @items.each do |item|
+        break if pruned >= excess_count
+        next if item.positive_reward?
+        if rel_path = item.file_path
+          full_path = File.join(dir, rel_path)
+          File.delete(full_path) if File.exists?(full_path)
+          item.file_path = nil
+          pruned += 1
+        end
+      end
     end
 
     # Serializes session to JSON file on disk

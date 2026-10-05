@@ -88,6 +88,32 @@ module Crowbar::CLI
         return
       end
 
+      # crowbar session review <id> [options]
+      if sub_args[0] == "review"
+        if sub_args.size < 2
+          err_puts Opal.style.fg(:red).render("Error: Missing session ID. Usage: crowbar session review <id> [options]")
+          do_exit(1)
+          return
+        end
+        session_id = sub_args[1]
+        review_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
+        handle_session_review(session_id, review_flags)
+        return
+      end
+
+      # crowbar session replay <id> <iteration> [options]
+      if sub_args[0] == "replay"
+        if sub_args.size < 2
+          err_puts Opal.style.fg(:red).render("Error: Missing session ID. Usage: crowbar session replay <id> <iteration> [options]")
+          do_exit(1)
+          return
+        end
+        session_id = sub_args[1]
+        replay_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
+        handle_session_replay(session_id, replay_flags)
+        return
+      end
+
       session_id = sub_args[0]
       if sub_args.size < 2
         err_puts Opal.style.fg(:red).render("Error: Missing action for session '#{session_id}'. Usage: crowbar session #{session_id} <action>")
@@ -102,8 +128,14 @@ module Crowbar::CLI
         next_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
         handle_session_next(session_id, next_flags)
       when "reward"
-        reward_val = sub_args.size > 2 ? sub_args[2] : nil
-        handle_session_reward(session_id, reward_val)
+        reward_args = sub_args.size > 2 ? sub_args[2..] : [] of String
+        handle_session_reward(session_id, reward_args)
+      when "review"
+        review_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
+        handle_session_review(session_id, review_flags)
+      when "replay"
+        replay_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
+        handle_session_replay(session_id, replay_flags)
       when "reset"
         handle_session_reset(session_id)
       when "status"
@@ -140,18 +172,26 @@ module Crowbar::CLI
     private def handle_session_next(session_id : String, sub_flags : Array(String) = [] of String)
       req_unique = @unique
       req_seek = @seek_offset
+      req_seed = @seed
       req_template = @template
       req_in_encoding = @input_encoding
       req_out_encoding = @output_encoding
       out_pattern = @output_pattern
       diff_mode = @show_diff
-      req_mutations : Array(String)? = nil
-      req_capacity : Int32? = nil
+      req_mutations : Array(String)? = @selected_mutations.try { |m| m.split(",") }
+      req_capacity : Int32? = @checksums_capacity
 
       i = 0
       while i < sub_flags.size
         arg = sub_flags[i]
         case arg
+        when "-s", "--seed"
+          if i + 1 < sub_flags.size
+            req_seed = sub_flags[i + 1].to_u64? || sub_flags[i + 1].hash.to_u64
+            i += 2
+          else
+            i += 1
+          end
         when "-t", "--template"
           if i + 1 < sub_flags.size
             req_template = sub_flags[i + 1]
@@ -248,6 +288,9 @@ module Crowbar::CLI
       if cap = req_capacity
         session.uniqueness_capacity = cap
       end
+      if s = req_seed
+        session.seed = s
+      end
       if muts = req_mutations
         session.set_mutators(muts)
       end
@@ -278,10 +321,30 @@ module Crowbar::CLI
       end
     end
 
-    private def handle_session_reward(session_id : String, val_str : String?)
+    private def handle_session_reward(session_id : String, sub_args : Array(String))
+      val_str : String? = nil
+      target_iter : Int32? = nil
+
+      i = 0
+      while i < sub_args.size
+        arg = sub_args[i]
+        case arg
+        when "-i", "--iteration", "-n"
+          if i + 1 < sub_args.size
+            target_iter = sub_args[i + 1].to_i?
+            i += 2
+          else
+            i += 1
+          end
+        else
+          val_str ||= arg
+          i += 1
+        end
+      end
+
       unless val_str
-        err_puts Opal.style.fg(:red).render("Error: Missing reward value. Usage: crowbar session #{session_id} reward <value>")
-        err_puts "Example: crowbar session #{session_id} reward 0.5"
+        err_puts Opal.style.fg(:red).render("Error: Missing reward value. Usage: crowbar session #{session_id} reward <value> [--iteration <N>]")
+        err_puts "Example: crowbar session #{session_id} reward 0.5 -i 3"
         do_exit(1)
         return
       end
@@ -300,14 +363,141 @@ module Crowbar::CLI
         return
       end
 
-      if session.last_mutators.empty?
-        err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' has not generated any items yet. Run 'crowbar session #{session_id} next' first.")
+      if session.items.empty? && session.last_mutators.empty?
+        err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' has not generated any items yet. Run 'next' first.")
         do_exit(1)
         return
       end
 
-      session.reward(reward_val)
-      puts Opal.style.fg(:green).render("Recorded reward #{reward_val} for session #{session_id} (mutators: #{session.last_mutators.join(", ")})")
+      begin
+        session.reward(reward_val, target_iter)
+        iter_desc = target_iter ? "iteration ##{target_iter}" : "session #{session_id}"
+        puts Opal.style.fg(:green).render("Recorded reward #{reward_val} for #{iter_desc} (Bandit & Corpus updated)")
+      rescue ex
+        err_puts Opal.style.fg(:red).render("Error: #{ex.message}")
+        do_exit(1)
+      end
+    end
+
+    private def handle_session_review(session_id : String, sub_flags : Array(String))
+      session = Session.load(session_id)
+      unless session
+        err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
+        do_exit(1)
+        return
+      end
+
+      no_tui = sub_flags.includes?("--no-tui") || sub_flags.includes?("--headless") || sub_flags.includes?("--batch")
+      use_json = sub_flags.includes?("--json") || @json_output
+      is_tty = PlatformIO.tty?(@out_io)
+
+      limit = 25
+      if idx = sub_flags.index("--limit") || sub_flags.index("-n")
+        limit = sub_flags[idx + 1]?.try(&.to_i?) || 25
+      end
+
+      if no_tui || use_json || !is_tty
+        TUI::SummaryView.render(session, @out_io, limit: limit, json: use_json)
+      else
+        TUI::Reviewer.run(session)
+      end
+    end
+
+    private def handle_session_replay(session_id : String, sub_flags : Array(String))
+      if sub_flags.empty?
+        err_puts Opal.style.fg(:red).render("Error: Missing iteration number to replay. Usage: crowbar session #{session_id} replay <iteration> [options]")
+        do_exit(1)
+        return
+      end
+
+      iter = sub_flags[0].to_i?
+      unless iter
+        err_puts Opal.style.fg(:red).render("Error: Invalid iteration number '#{sub_flags[0]}'. Must be an integer.")
+        do_exit(1)
+        return
+      end
+
+      session = Session.load(session_id)
+      unless session
+        err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' does not exist.")
+        do_exit(1)
+        return
+      end
+
+      item = session.get_item(iter)
+      unless item
+        err_puts Opal.style.fg(:red).render("Error: Iteration #{iter} not found in session '#{session_id}'.")
+        do_exit(1)
+        return
+      end
+
+      out_file : String? = @output_pattern
+      show_diff = sub_flags.includes?("--diff") || sub_flags.includes?("-d") || @show_diff
+      use_json = sub_flags.includes?("--json") || @json_output
+      raw_output = sub_flags.includes?("--raw")
+
+      if idx = sub_flags.index("-o") || sub_flags.index("--output")
+        out_file = sub_flags[idx + 1]?
+      end
+
+      replayed_buf, steps = session.replay(iter)
+
+      if f = out_file
+        File.write(f, replayed_buf.to_slice)
+        puts Opal.style.fg(:green).render("Replayed iteration #{iter} and wrote output to #{f} (#{replayed_buf.size} bytes).")
+        return
+      end
+
+      if raw_output
+        @out_io.write(replayed_buf.to_slice)
+        return
+      end
+
+      if use_json
+        payload = {
+          "session_id" => session_id,
+          "iteration"  => iter,
+          "seed"       => item.seed.to_s,
+          "seek"       => item.seek_offset,
+          "size"       => replayed_buf.size,
+          "mutators"   => item.mutators,
+          "diff_bytes" => item.diff_count,
+          "steps"      => steps.map do |s|
+            {
+              "index"       => s.index,
+              "category"    => s.category.to_s.downcase,
+              "name"        => s.name,
+              "description" => s.description,
+              "range"       => s.range_string,
+              "diff_bytes"  => s.diff_bytes,
+            }
+          end,
+        }
+        @out_io.puts(payload.to_pretty_json)
+        return
+      end
+
+      bold = Opal.style.bold
+      cyan = Opal.style.bold.fg(:cyan)
+      yellow = Opal.style.fg(:yellow)
+      dim = Opal.style.fg(:bright_black)
+
+      puts cyan.render("=== Replayed Iteration ##{iter} for Session '#{session_id}' ===")
+      puts dim.render(sprintf("Seed: 0x%X | Seek: %d | Baseline: %d B -> Mutant: %d B (Diff: %d B)", item.seed, item.seek_offset, session.baseline.size, replayed_buf.size, item.diff_count))
+      puts dim.render("Mutators: #{item.mutators.join(", ")}")
+      puts dim.render("-" * 72)
+      puts bold.render("Transformation Process Tree:")
+
+      steps.each do |s|
+        badge = s.category.to_badge
+        delta = s.diff_bytes != 0 ? " (#{s.diff_string})" : ""
+        puts sprintf("  %d. %-10s %-12s %s%s", s.index, badge, s.name, s.description, yellow.render(delta))
+      end
+
+      if show_diff
+        puts ""
+        HexDiff.render(session.baseline, replayed_buf, @out_io)
+      end
     end
 
     private def handle_session_reset(session_id : String)
@@ -338,8 +528,17 @@ module Crowbar::CLI
           do_exit(1)
         end
       else
-        err_puts Opal.style.fg(:red).render("Unknown show target '#{target}'. Use '--baseline' or '--mutant'.")
-        do_exit(1)
+        if iter = target.to_i?
+          if buf = session.get_mutant(iter)
+            @out_io.write(buf.to_slice)
+          else
+            err_puts Opal.style.fg(:red).render("Error: Could not retrieve mutant for iteration #{iter} in session '#{session_id}'.")
+            do_exit(1)
+          end
+        else
+          err_puts Opal.style.fg(:red).render("Unknown show target '#{target}'. Use '--baseline', '--mutant', or iteration number.")
+          do_exit(1)
+        end
       end
     end
 
@@ -852,9 +1051,11 @@ module Crowbar::CLI
       puts "Actions:"
       puts "  next [flags]      Generate the next mutated item from session baseline"
       puts "                    Flags: -t/--template, -u/--unique, -S/--seek, -d/--diff, -o/--output"
-      puts "  reward <val>      Provide feedback (-1.0 to 1.0) on the last generated mutant"
+      puts "  reward <val>      Provide feedback (-1.0 to 1.0) on mutant (latest or -i/--iteration <N>)"
+      puts "  review [flags]    Interactive TUI session reviewer, hex diff & breakdown (--no-tui, --json)"
+      puts "  replay <#> [opts] Deterministically replay an iteration and inspect transformation breakdown"
       puts "  setup [options]   Configure active rules, mutators, templates, uniqueness, scopes"
-      puts "  show [opts]       Print session baseline or latest mutant (--baseline, --mutant)"
+      puts "  show [opts]       Print baseline, latest mutant, or iteration N (--baseline, --mutant, <#)"
       puts "  history [opts]    Display event history timeline (--limit N, --json)"
       puts "  reset             Reset and delete the session"
       puts "  status [--json]   Display session statistics, iteration count & bandit weights"
@@ -862,15 +1063,15 @@ module Crowbar::CLI
       puts ""
       puts "Workflow Examples:"
       puts "  1. Initialize with input:  \"POST / HTTP/1.1\\r\\n\\r\\n\" | crowbar session 1 next"
-      puts "  2. Reward feedback:        crowbar session 1 reward 0.5   (or -0.5)"
-      puts "  3. Generate next:          crowbar session 1 next > out.txt"
-      puts "  4. Templated generation:   crowbar session 1 next -t \"PREFIX %f SUFFIX\""
-      puts "  5. Unique deduplication:   crowbar session 1 next --unique"
-      puts "  6. Show current mutant:    crowbar session 1 show --mutant"
-      puts "  7. View event history:     crowbar session 1 history --limit 10"
-      puts "  8. Configure session:      crowbar session 1 setup --add-rule mp3 --add-mutator sec --unique"
-      puts "  9. Reset session:          crowbar session 1 reset"
-      puts " 10. Reset via new input:    \"NEW INPUT\" | crowbar session 1 next"
+      puts "  2. Review in TUI:          crowbar session 1 review"
+      puts "  3. Replay iteration #3:    crowbar session 1 replay 3 --diff"
+      puts "  4. Reward iteration #3:    crowbar session 1 reward 1.0 -i 3"
+      puts "  5. Templated generation:   crowbar session 1 next -t \"PREFIX %f SUFFIX\""
+      puts "  6. Unique deduplication:   crowbar session 1 next --unique"
+      puts "  7. Show past mutant:       crowbar session 1 show 3"
+      puts "  8. View event history:     crowbar session 1 history --limit 10"
+      puts "  9. Configure session:      crowbar session 1 setup --add-rule mp3 --add-mutator sec --unique"
+      puts " 10. Reset session:          crowbar session 1 reset"
     end
 
     private def print_setup_help

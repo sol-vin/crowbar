@@ -41,9 +41,24 @@ module Crowbar
       meta
     end
 
-    def record_mutation(name : String, range : Tuple(Int32, Int32)? = nil)
+    def record_mutation(name : String, range : Tuple(Int32, Int32)? = nil, description : String? = nil)
       if meta = @current_metadata
-        meta.record_mutation(name, range)
+        meta.record_mutation(name, range, description)
+      end
+    end
+
+    def record_step(
+      category : StepCategory,
+      name : String,
+      description : String,
+      range : Tuple(Int32, Int32)? = nil,
+      diff_bytes : Int32 = 0,
+      details : Hash(String, String) = Hash(String, String).new,
+    ) : TransformationStep?
+      if meta = @current_metadata
+        meta.record_step(category, name, description, range, diff_bytes, details)
+      else
+        nil
       end
     end
   end

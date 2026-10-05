@@ -254,5 +254,15 @@ module Crowbar
       end
       (printable_count / sample_size.to_f) > 0.85
     end
+
+    def ==(other : Buffer) : Bool
+      @bytes == other.bytes
+    end
+
+    def ==(other) : Bool
+      false
+    end
+
+    def_hash @bytes
   end
 end

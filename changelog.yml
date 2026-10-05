@@ -24,7 +24,7 @@ settings:
 releases:
 - version: 0.1.37
   date: "2026-10-04"
-  status: released
+  status: active
   entries:
   - type: other
     description: 1st commit
@@ -223,9 +223,14 @@ releases:
     bullet: "\U0001F4D6"
     hash: 827b585
     author: Ian Rash
+  - type: docs
+    description: compile changelog for v0.1.35
+    bullet: "\U0001F4D6"
+    hash: 4f4ad87
+    author: Ian Rash
 - version: 0.1.36
   date: "2026-10-04"
-  status: active
+  status: released
   entries:
   - type: other
     description: 1st commit

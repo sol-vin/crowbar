@@ -25,6 +25,7 @@
 - 📖 record sequence splicing, Mutators::Security, and session features in changelog (`c24bcf1`)
 - 📖 **[CHANGELOG]** update changelog for 0.1.34 (`6fcd2be`)
 - 📖 compile changelog for v0.1.35 (`827b585`)
+- 📖 compile changelog for v0.1.35 (`4f4ad87`)
 
 ### 🛠️ Chores & Tooling
 - • 1st commit (`4029cc1`)

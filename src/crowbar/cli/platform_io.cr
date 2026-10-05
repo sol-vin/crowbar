@@ -63,5 +63,16 @@ module Crowbar::CLI
     rescue
       false
     end
+
+    # Checks whether an IO stream is connected to an interactive terminal/TTY
+    def self.tty?(io : IO) : Bool
+      if io.is_a?(IO::FileDescriptor)
+        io.as(IO::FileDescriptor).tty?
+      else
+        false
+      end
+    rescue
+      false
+    end
   end
 end

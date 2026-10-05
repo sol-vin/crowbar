@@ -183,27 +183,36 @@ module Crowbar
         max_retries.times do
           candidate = mutate_internal(baseline)
           rendered = if t = @template
-                       Template.render(t, candidate)
+                       diff_t = 0
+                       out_t = Template.render(t, candidate)
+                       @context.record_step(StepCategory::Template, "template", "Rendered output envelope via template", diff_bytes: out_t.size - candidate.size)
+                       out_t
                      else
                        candidate
                      end
           if filter.filter(rendered)
+            @context.record_step(StepCategory::Uniqueness, "dedup", "Verified unique digest in ring buffer")
             return rendered
           end
         end
 
         # Fallback if max retries exceeded
         rendered = if t = @template
-                     Template.render(t, candidate)
+                     out_t = Template.render(t, candidate)
+                     @context.record_step(StepCategory::Template, "template", "Rendered output envelope via template", diff_bytes: out_t.size - candidate.size)
+                     out_t
                    else
                      candidate
                    end
         filter.add(rendered)
+        @context.record_step(StepCategory::Uniqueness, "dedup", "Added digest to uniqueness ring buffer")
         rendered
       else
         candidate = mutate_internal(baseline)
         if t = @template
-          Template.render(t, candidate)
+          out_t = Template.render(t, candidate)
+          @context.record_step(StepCategory::Template, "template", "Rendered output envelope via template", diff_bytes: out_t.size - candidate.size)
+          out_t
         else
           candidate
         end
@@ -215,13 +224,21 @@ module Crowbar
 
       # 1. Evolve: Select parent buffer (baseline or high-fitness candidate)
       working = @evolution.next_parent(baseline, @context.prng)
+      if working == baseline
+        @context.record_step(StepCategory::Parent, "baseline", "Selected baseline input (#{baseline.size} bytes)")
+      else
+        @context.record_step(StepCategory::Parent, "corpus_candidate", "Selected high-fitness corpus candidate (#{working.size} bytes)")
+      end
 
       # 2. Check and apply structure-preserving rules if configured or matched
       applied_rule = false
       @rules.each do |rule|
         if rule.match?(working)
+          before_rule_sz = working.size
           applied = rule.apply(@context, working)
           if applied
+            diff_b = working.size - before_rule_sz
+            @context.record_step(StepCategory::Rule, rule.name, "Applied structure-preserving rule '#{rule.name}'", diff_bytes: diff_b)
             applied_rule = true
             break
           end
@@ -241,6 +258,9 @@ module Crowbar
             prob = total_scope_weight > 0 ? (sc.weight / total_scope_weight) : 1.0
             if @context.prng.rand_bool(prob)
               target_ranges = sc.selector.select(working)
+              sel_class = sc.selector.class.name.split("::").last
+              @context.record_step(StepCategory::Selector, sc.name, "Selected #{target_ranges.size} range(s) via scope '#{sc.name}' (#{sel_class})")
+
               target_ranges.reverse_each do |range|
                 applied_scope_rule = false
                 unless sc.rules.empty?
@@ -249,7 +269,9 @@ module Crowbar
                     sub_buf = Buffer.new(working[range[0], slice_len])
                     sc.rules.each do |rule|
                       if rule.match?(sub_buf) && rule.apply(@context, sub_buf)
+                        diff_b = sub_buf.size - slice_len
                         working.replace_range(range[0], slice_len, sub_buf.to_slice)
+                        @context.record_step(StepCategory::Rule, rule.name, "Applied scoped rule '#{rule.name}' to range [#{range[0]}...#{range[1]}]", range: range, diff_bytes: diff_b)
                         applied_scope_rule = true
                         break
                       end
@@ -272,8 +294,11 @@ module Crowbar
       end
 
       # 4. Apply post-transform fixup hooks (e.g. recalculate length, checksums)
-      @fixups.each do |fixup|
+      @fixups.each_with_index do |fixup, idx|
+        before_fix_sz = working.size
         fixup.call(working)
+        diff_b = working.size - before_fix_sz
+        @context.record_step(StepCategory::Fixup, "fixup_#{idx + 1}", "Applied post-transformation fixup hook", diff_bytes: diff_b)
       end
 
       meta.output_size = working.size

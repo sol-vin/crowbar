@@ -74,7 +74,7 @@ module Crowbar::CLI
       @show_diff = args.includes?("--diff") || args.includes?("-d")
 
       # Handle session subcommands if present
-      if args.includes?("session")
+      if args.includes?("session") || args.first? == "review" || args.first? == "replay"
         remaining = extract_flags(args)
         handler = SessionHandler.new(
           in_io: @in_io,
@@ -95,8 +95,14 @@ module Crowbar::CLI
           input_encoding: @input_encoding,
           output_encoding: @output_encoding,
         )
-        session_idx = remaining.index("session").not_nil!
-        sub_args = remaining[(session_idx + 1)..]
+        sub_args = if args.first? == "review"
+                     ["review"] + (remaining.size > 1 ? remaining[1..] : [] of String)
+                   elsif args.first? == "replay"
+                     ["replay"] + (remaining.size > 1 ? remaining[1..] : [] of String)
+                   else
+                     session_idx = remaining.index("session").not_nil!
+                     remaining[(session_idx + 1)..]
+                   end
         handler.handle(sub_args)
         return
       end
@@ -105,8 +111,10 @@ module Crowbar::CLI
         opts.banner = Opal.style.bold.fg(:cyan).render("Crowbar #{Crowbar.version} - Data Transformation & Fuzzing Engine") +
                       "\nUsage: crowbar [options] [sample-files...]" +
                       "\n       crowbar session <id> next" +
-                      "\n       crowbar session <id> reward <value>" +
-                      "\n       crowbar session <id> show [--baseline | --mutant]" +
+                      "\n       crowbar session <id> review" +
+                      "\n       crowbar session <id> replay <#>" +
+                      "\n       crowbar session <id> reward <value> [-i <#>]" +
+                      "\n       crowbar session <id> show [--baseline | --mutant | <#>]" +
                       "\n       crowbar session <id> history [--limit N]" +
                       "\n       crowbar session <id> reset"
 
