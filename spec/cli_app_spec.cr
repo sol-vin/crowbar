@@ -60,17 +60,17 @@ describe "Crowbar CLI Application End-to-End" do
       stdout_h.should contain("Usage: crowbar [options]")
     end
 
-    it "lists all 23 structure-preserving rules, mutators, patterns, and selectors with --list" do
+    it "lists all 24 structure-preserving rules, mutators, patterns, and selectors with --list" do
       code, stdout, _ = run_cli(["--list"])
       code.should eq(0)
       stdout.should contain("=== Crowbar Component Catalog ===")
-      stdout.should contain("Structure-Preserving Rules (23 Formats):")
+      stdout.should contain("Structure-Preserving Rules (24 Formats):")
 
-      # All 23 formats must be cataloged
+      # All 24 formats must be cataloged
       [
         "json", "yaml", "http", "dns", "csv", "xml", "url", "tlv",
         "base64", "varint", "ftp", "sql", "png", "bmp", "wav", "mp3", "wad", "pdf",
-        "7z", "tar", "zip", "packet", "markdown",
+        "7z", "tar", "zip", "packet", "markdown", "jwt",
       ].each do |rule|
         stdout.should contain(rule)
       end

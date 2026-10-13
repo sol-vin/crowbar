@@ -22,6 +22,7 @@ require "./tar"
 require "./zip"
 require "./packet"
 require "./markdown"
+require "./jwt"
 
 module Crowbar::Rules
   # Metadata and factory definition for a registered structure rule
@@ -110,6 +111,7 @@ module Crowbar::Rules
   Registry.register("zip", "PKZip archive framing with automated length and CRC32 fixup", ["pkzip"]) { ZipRule.new }
   Registry.register("packet", "Raw IPv4, TCP, UDP, and PCAP framing with RFC checksum fixups", ["ipv4", "tcp", "udp", "pcap", "rawpacket"]) { PacketRule.new }
   Registry.register("markdown", "CommonMark/Markdown documents with link, table, heading & fence mutations", ["md", "commonmark"]) { MarkdownRule.new }
+  Registry.register("jwt", "JSON Web Token (RFC 7519) with algorithm confusion, claim boundary, and signature tampering", ["jsonwebtoken", "jws"]) { JWTRule.new }
 end
 
 module Crowbar
