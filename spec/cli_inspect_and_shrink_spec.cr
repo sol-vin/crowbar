@@ -56,9 +56,11 @@ describe "Crowbar CLI - Inspect and Shrink commands" do
     # Create temp sample file
     bloated = ("PREFIX_" * 20) + "FATAL_ERROR_TRIGGER" + ("_SUFFIX" * 20)
     temp_in = File.tempfile("bloated_sample", ".txt")
+    temp_in.close
     File.write(temp_in.path, bloated)
 
     temp_out = File.tempfile("minimized_out", ".txt")
+    temp_out.close
 
     out_io = IO::Memory.new
     err_io = IO::Memory.new
@@ -70,11 +72,15 @@ describe "Crowbar CLI - Inspect and Shrink commands" do
       exit_handler: ->(code : Int32) { raise Crowbar::CLI::ExitException.new(code) }
     )
 
-    # Use findstr to search for pattern and assert match
-    test_cmd = "findstr /C:\"FATAL_ERROR_TRIGGER\" @@"
+    # Use cross-platform command to emit file contents and let --match assert substring
+    test_cmd = {% if flag?(:win32) %}
+                 "cmd /c type \"@@\""
+               {% else %}
+                 "cat \"@@\""
+               {% end %}
 
     begin
-      app.run(["shrink", temp_in.path, "--cmd", test_cmd, "--match", "FATAL_ERROR_TRIGGER", "-o", temp_out.path])
+      app.run(["shrink", temp_in.path, "--cmd", test_cmd, "--match", "FATAL_ERROR_TRIGGER", "-o", temp_out.path, "--timeout", "5000"])
       err_str = err_io.to_s
       err_str.should contain("Crowbar Anomaly-Preserving Minimizer")
       err_str.should contain("Reduction complete")
@@ -132,7 +138,7 @@ describe "Crowbar CLI - Inspect and Shrink commands" do
       err_io: IO::Memory.new,
       exit_handler: ->(code : Int32) { raise Crowbar::CLI::ExitException.new(code) }
     )
-    app.run(["session", "shrink_sess", "next"])
+    app.run(["session", "shrink_sess", "next", "-s", "42", "-p", "once", "-m", "bd"])
 
     out_shrink = IO::Memory.new
     err_shrink = IO::Memory.new
@@ -142,7 +148,12 @@ describe "Crowbar CLI - Inspect and Shrink commands" do
       err_io: err_shrink,
       exit_handler: ->(code : Int32) { raise Crowbar::CLI::ExitException.new(code) }
     )
-    app2.run(["session", "shrink_sess", "shrink", "1", "--cmd", "findstr /C:\"TARGET_\" @@", "--match", "TARGET_", "--timeout", "5000"])
+    shrink_cmd = {% if flag?(:win32) %}
+                   "cmd /c type \"@@\""
+                 {% else %}
+                   "cat \"@@\""
+                 {% end %}
+    app2.run(["session", "shrink_sess", "shrink", "1", "--cmd", shrink_cmd, "--match", "TARGET_", "--timeout", "5000"])
 
     err_str = err_shrink.to_s
     err_str.should contain("Crowbar Session Mutant Shrinker")

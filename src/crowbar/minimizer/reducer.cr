@@ -49,6 +49,7 @@ module Crowbar::Minimizer
       if cmd_str.includes?("@@")
         # File argument substitution
         temp_file = File.tempfile("crowbar_shrink")
+        temp_file.close
         temp_path = temp_file.path
         begin
           File.write(temp_path, candidate.to_slice)

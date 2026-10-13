@@ -2,7 +2,7 @@ module Crowbar
   {% if @top_level.has_constant?(:Carbon) %}
     Carbon.version!
   {% else %}
-    VERSION = "0.1.42"
+    VERSION = "0.1.43"
 
     def self.version : String
       VERSION
