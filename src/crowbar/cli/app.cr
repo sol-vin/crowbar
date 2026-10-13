@@ -5,6 +5,7 @@ require "./diff"
 require "./platform_io"
 require "./catalog_view"
 require "./session_handler"
+require "./campaign_handler"
 
 module Crowbar::CLI
   class ExitException < Exception
@@ -71,7 +72,28 @@ module Crowbar::CLI
     def run(args : Array(String))
       @json_output = args.includes?("--json")
       @auto_detect = args.includes?("--auto")
-      @show_diff = args.includes?("--diff") || args.includes?("-d")
+      # Handle standalone inspect and shrink subcommands
+      if args.first? == "inspect"
+        handle_inspect(args[1..])
+        return
+      end
+
+      if args.first? == "shrink" || args.first? == "minimize"
+        handle_shrink(args[1..])
+        return
+      end
+
+      # Handle campaign / fuzz subcommands
+      if args.first? == "campaign" || args.first? == "fuzz"
+        handler = CampaignHandler.new(
+          in_io: @in_io,
+          out_io: @out_io,
+          err_io: @err_io,
+          exit_handler: @exit_handler
+        )
+        handler.handle(args[1..])
+        return
+      end
 
       # Handle session subcommands if present
       if args.includes?("session") || args.first? == "review" || args.first? == "replay"
@@ -110,7 +132,12 @@ module Crowbar::CLI
       parser = OptionParser.new do |opts|
         opts.banner = Opal.style.bold.fg(:cyan).render("Crowbar #{Crowbar.version} - Data Transformation & Fuzzing Engine") +
                       "\nUsage: crowbar [options] [sample-files...]" +
+                      "\n       crowbar campaign [options]" +
+                      "\n       crowbar inspect <file> [--json]" +
+                      "\n       crowbar shrink <file> --cmd \"COMMAND\" [-o <out>]" +
                       "\n       crowbar session <id> next" +
+                      "\n       crowbar session <id> inspect" +
+                      "\n       crowbar session <id> shrink <#> --cmd \"COMMAND\"" +
                       "\n       crowbar session <id> review" +
                       "\n       crowbar session <id> replay <#>" +
                       "\n       crowbar session <id> reward <value> [-i <#>]" +
@@ -477,6 +504,108 @@ module Crowbar::CLI
         end
       end
       remaining
+    end
+
+    private def handle_inspect(args : Array(String))
+      use_json = args.includes?("--json") || @json_output
+      file_path = args.reject { |a| a.starts_with?("-") }.first?
+
+      buf = if file_path && File.exists?(file_path)
+              Buffer.new(File.read(file_path))
+            elsif PlatformIO.has_data?(@in_io)
+              Buffer.from_io(@in_io)
+            elsif file_path
+              Buffer.new(file_path)
+            else
+              err_puts Opal.style.fg(:red).render("Error: No input provided for inspect. Specify a file path or pipe via STDIN.")
+              do_exit(1)
+              return
+            end
+
+      report = Inspector::Analyzer.analyze_buffer(buf, file_path)
+      Inspector::View.render(report, @out_io, use_json)
+    end
+
+    private def handle_shrink(args : Array(String))
+      cmd : String? = nil
+      out_path : String? = nil
+      match_str : String? = nil
+      timeout_ms = 1000
+
+      i = 0
+      pos_files = [] of String
+      while i < args.size
+        case args[i]
+        when "--cmd", "-c"
+          cmd = args[i + 1]?
+          i += 2
+        when "-o", "--output"
+          out_path = args[i + 1]?
+          i += 2
+        when "--match", "-m"
+          match_str = args[i + 1]?
+          i += 2
+        when "--timeout"
+          timeout_ms = args[i + 1]?.try(&.to_i?) || 1000
+          i += 2
+        else
+          pos_files << args[i] unless args[i].starts_with?("-")
+          i += 1
+        end
+      end
+
+      unless cmd
+        err_puts Opal.style.fg(:red).render("Error: Missing --cmd option for shrink. Usage: crowbar shrink <file> --cmd \"COMMAND\"")
+        do_exit(1)
+        return
+      end
+
+      file_path = pos_files.first?
+      buf = if file_path && File.exists?(file_path)
+              Buffer.new(File.read(file_path))
+            elsif PlatformIO.has_data?(@in_io)
+              Buffer.from_io(@in_io)
+            elsif file_path
+              Buffer.new(file_path)
+            else
+              err_puts Opal.style.fg(:red).render("Error: No input provided for shrink. Specify a file or pipe data.")
+              do_exit(1)
+              return
+            end
+
+      match_regex = match_str ? Regex.new(Regex.escape(match_str)) : nil
+
+      cb = ->(iter : Int32, cur : Int32, orig : Int32) {
+        pct = orig > 0 ? ((orig - cur).to_f64 / orig * 100.0).round(1) : 0.0
+        err_puts Opal.style.fg(:cyan).render(sprintf("  [shrink] Iteration %d: %d B -> %d B (-%.1f%%)", iter, orig, cur, pct))
+        nil
+      }
+
+      reducer = Minimizer::Reducer.new(
+        command: cmd,
+        match_regex: match_regex,
+        timeout_ms: timeout_ms,
+        progress_callback: cb
+      )
+
+      err_puts Opal.style.bold.fg(:cyan).render("=== Crowbar Anomaly-Preserving Minimizer ===")
+      err_puts sprintf("Original size: %d B | Command: %s", buf.size, cmd)
+
+      begin
+        reduced = reducer.reduce(buf)
+        pct = buf.size > 0 ? ((buf.size - reduced.size).to_f64 / buf.size * 100.0).round(1) : 0.0
+        err_puts Opal.style.bold.fg(:green).render(sprintf("Reduction complete: %d B -> %d B (-%.1f%%)", buf.size, reduced.size, pct))
+
+        if out_path
+          File.write(out_path, reduced.to_slice)
+          err_puts "Saved minimal reproducer to #{out_path}"
+        else
+          @out_io.write(reduced.to_slice)
+        end
+      rescue ex
+        err_puts Opal.style.fg(:red).render("Shrink failed: #{ex.message}")
+        do_exit(1)
+      end
     end
   end
 end

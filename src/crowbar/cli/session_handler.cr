@@ -114,6 +114,32 @@ module Crowbar::CLI
         return
       end
 
+      # crowbar session inspect <id> [options]
+      if sub_args[0] == "inspect"
+        if sub_args.size < 2
+          err_puts Opal.style.fg(:red).render("Error: Missing session ID. Usage: crowbar session inspect <id> [options]")
+          do_exit(1)
+          return
+        end
+        session_id = sub_args[1]
+        inspect_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
+        handle_session_inspect(session_id, inspect_flags)
+        return
+      end
+
+      # crowbar session shrink <id> <#> [options]
+      if sub_args[0] == "shrink" || sub_args[0] == "minimize"
+        if sub_args.size < 3
+          err_puts Opal.style.fg(:red).render("Error: Missing session ID or iteration #. Usage: crowbar session shrink <id> <#> [options]")
+          do_exit(1)
+          return
+        end
+        session_id = sub_args[1]
+        shrink_flags = sub_args[2..]
+        handle_session_shrink(session_id, shrink_flags)
+        return
+      end
+
       session_id = sub_args[0]
       if sub_args.size < 2
         err_puts Opal.style.fg(:red).render("Error: Missing action for session '#{session_id}'. Usage: crowbar session #{session_id} <action>")
@@ -136,6 +162,12 @@ module Crowbar::CLI
       when "replay"
         replay_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
         handle_session_replay(session_id, replay_flags)
+      when "inspect"
+        inspect_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
+        handle_session_inspect(session_id, inspect_flags)
+      when "shrink", "minimize"
+        shrink_flags = sub_args.size > 2 ? sub_args[2..] : [] of String
+        handle_session_shrink(session_id, shrink_flags)
       when "reset"
         handle_session_reset(session_id)
       when "status"
@@ -497,6 +529,111 @@ module Crowbar::CLI
       if show_diff
         puts ""
         HexDiff.render(session.baseline, replayed_buf, @out_io)
+      end
+    end
+
+    private def handle_session_inspect(session_id : String, flags : Array(String))
+      session = Session.load(session_id)
+      unless session
+        err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' not found")
+        do_exit(1)
+        return
+      end
+
+      use_json = flags.includes?("--json") || @json_output
+      report = Inspector::Analyzer.analyze_session(session)
+      Inspector::View.render(report, @out_io, use_json)
+    end
+
+    private def handle_session_shrink(session_id : String, flags : Array(String))
+      session = Session.load(session_id)
+      unless session
+        err_puts Opal.style.fg(:red).render("Error: Session '#{session_id}' not found")
+        do_exit(1)
+        return
+      end
+
+      target_iter = flags.first?.try(&.to_i?)
+      if target_iter.nil?
+        err_puts Opal.style.fg(:red).render("Error: Specify iteration # to shrink. Usage: crowbar session #{session_id} shrink <#>")
+        do_exit(1)
+        return
+      end
+
+      target_buf = session.get_mutant(target_iter)
+      if target_buf.nil?
+        target_buf, _ = session.replay(target_iter) rescue nil
+      end
+
+      unless target_buf
+        err_puts Opal.style.fg(:red).render("Error: Could not retrieve mutant for iteration #{target_iter}")
+        do_exit(1)
+        return
+      end
+
+      cmd : String? = nil
+      out_path : String? = nil
+      match_str : String? = nil
+      timeout_ms = 1000
+
+      i = 1
+      while i < flags.size
+        case flags[i]
+        when "--cmd", "-c"
+          cmd = flags[i + 1]?
+          i += 2
+        when "-o", "--output"
+          out_path = flags[i + 1]?
+          i += 2
+        when "--match", "-m"
+          match_str = flags[i + 1]?
+          i += 2
+        when "--timeout"
+          timeout_ms = flags[i + 1]?.try(&.to_i?) || 1000
+          i += 2
+        else
+          i += 1
+        end
+      end
+
+      unless cmd
+        err_puts Opal.style.fg(:red).render("Error: Missing --cmd option. Usage: crowbar session #{session_id} shrink #{target_iter} --cmd \"COMMAND\"")
+        do_exit(1)
+        return
+      end
+
+      match_regex = match_str ? Regex.new(Regex.escape(match_str)) : nil
+
+      cb = ->(iter : Int32, cur : Int32, orig : Int32) {
+        pct = orig > 0 ? ((orig - cur).to_f64 / orig * 100.0).round(1) : 0.0
+        err_puts Opal.style.fg(:cyan).render(sprintf("  [shrink] Iteration %d: %d B -> %d B (-%.1f%%)", iter, orig, cur, pct))
+        nil
+      }
+
+      reducer = Minimizer::Reducer.new(
+        command: cmd,
+        match_regex: match_regex,
+        timeout_ms: timeout_ms,
+        progress_callback: cb
+      )
+
+      err_puts Opal.style.bold.fg(:cyan).render("=== Crowbar Session Mutant Shrinker ===")
+      err_puts sprintf("Session: %s | Iteration: #%d | Size: %d B | Command: %s", session.id, target_iter, target_buf.size, cmd)
+
+      begin
+        reduced = reducer.reduce(target_buf)
+        pct = target_buf.size > 0 ? ((target_buf.size - reduced.size).to_f64 / target_buf.size * 100.0).round(1) : 0.0
+        err_puts Opal.style.bold.fg(:green).render(sprintf("Reduction complete: %d B -> %d B (-%.1f%%)", target_buf.size, reduced.size, pct))
+
+        if out_path
+          File.write(out_path, reduced.to_slice)
+          err_puts "Saved minimized reproducer to #{out_path}"
+        else
+          @out_io.write(reduced.to_slice)
+        end
+      rescue ex
+        err_puts Opal.style.fg(:red).render("Shrink failed: #{ex.message}")
+        do_exit(1)
       end
     end
 
@@ -1054,6 +1191,8 @@ module Crowbar::CLI
       puts "  reward <val>      Provide feedback (-1.0 to 1.0) on mutant (latest or -i/--iteration <N>)"
       puts "  review [flags]    Interactive TUI session reviewer, hex diff & breakdown (--no-tui, --json)"
       puts "  replay <#> [opts] Deterministically replay an iteration and inspect transformation breakdown"
+      puts "  inspect [--json]  Structural format breakdown, Shannon entropy & session mutation heatmap"
+      puts "  shrink <#> --cmd  Anomaly-preserving test case minimizer for iteration # mutant"
       puts "  setup [options]   Configure active rules, mutators, templates, uniqueness, scopes"
       puts "  show [opts]       Print baseline, latest mutant, or iteration N (--baseline, --mutant, <#)"
       puts "  history [opts]    Display event history timeline (--limit N, --json)"

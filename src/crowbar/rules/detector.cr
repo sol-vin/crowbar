@@ -87,6 +87,9 @@ module Crowbar
       end
 
       # 2. Text-Based Protocols & Structured Formats
+      first_window = buffer[0, [512, buffer.size].min].to_slice
+      return nil if first_window.includes?(0_u8)
+
       str = String.new(buffer.to_slice) rescue nil
       if str
         trimmed = str.lstrip
@@ -121,6 +124,14 @@ module Crowbar
         # XML / HTML
         if trimmed.starts_with?("<?xml") || (trimmed.starts_with?("<") && trimmed.includes?(">") && !trimmed.starts_with?("<<"))
           return :xml
+        end
+
+        # JWT (JSON Web Token): starts with "eyJ", exactly 2 dots, non-empty header/payload
+        if trimmed.starts_with?("eyJ") && trimmed.count('.') == 2
+          parts = trimmed.split('.')
+          if parts.size == 3 && !parts[0].empty? && !parts[1].empty?
+            return :jwt
+          end
         end
 
         # JSON

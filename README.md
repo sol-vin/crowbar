@@ -30,7 +30,7 @@ Inspired by the versatility of general-purpose mutation engines and modern prope
 - 🔤 **Dynamic Vocabulary Harvesting**: Ingests keywords, tokens, and identifiers extracted from target error messages via `fuzzer.harvest(error_text)` into the active mutation dictionary.
 - 📦 **Declarative Protocol Framing (`frame` & `field`)**: Model binary protocol packets declaratively with automatic payload length recalculation (`relates_to: :payload`) and checksum recalculation (`covers: [...]`, e.g. IEEE 802.3 CRC32).
 - 📜 **Context-Free Generative Grammars (`grammar`)**: Generate structured starting seeds (SQL statements, expressions, commands) using weighted production rules with bounded recursion depth.
-- 📐 **Structure-Preserving Rules (18 Formats)**:
+- 📐 **Structure-Preserving Rules (24 Formats)**:
   - **`JSON`**: Mutates AST leaf nodes (numbers, strings, booleans, arrays, keys) while guaranteeing 100% syntactically valid JSON output.
   - **`YAML`**: Transforms scalar values and mappings while preserving document hierarchy and indentation.
   - **`HTTP`**: Mutates headers, query strings, and body payloads while maintaining strict RFC 7230 CRLF framing.
@@ -49,6 +49,12 @@ Inspired by the versatility of general-purpose mutation engines and modern prope
   - **`MP3`**: MPEG Layer III preservation of ID3v2 tags and 11-bit MPEG audio frame sync words (`0xFF 0xE0+`), mutating bitrates, sample frequencies, and audio payloads.
   - **`WAD`**: id Software Doom IWAD/PWAD file container, preserving 12-byte header, 16-byte lump directory table entries, and structured payloads (`THINGS`, `VERTEXES`, `LINEDEFS`, sound/graphics).
   - **`PDF`**: Adobe Portable Document Format, preserving indirect object framing (`obj ... endobj`), mutating dictionary attributes and stream bodies, with automated `startxref` offset synchronization.
+  - **`7Z`**: 7-Zip archive framing with automated StartHeader CRC32 recalculation.
+  - **`TAR`**: POSIX UStar TAR archive framing with automated octal checksum recalculation.
+  - **`ZIP`**: PKZip archive framing with automated chunk length and CRC32 checksum recalculation.
+  - **`PACKET`**: Raw IPv4, TCP, UDP, and PCAP packet framing with automated checksum recalculation.
+  - **`MARKDOWN`**: CommonMark document AST with link, table, heading, and code fence mutations.
+  - **`JWT`**: RFC 7519 JSON Web Tokens with algorithm confusion (`none`, `HS256`), claim boundary testing (`exp`, `iat`, `nbf`), `kid` injection, role escalation, and signature tampering.
 - 🎯 **Fine-Grained Selectors & Combinators**: Target byte ranges (`scope :header, bytes: 0...16`), columns (`field: 1`), character classes (`chars: :digits`), periodic strides (`stride: 4`), Shannon entropy (`entropy: :high`), or combine with `&`, `|`, and `~`.
 - 🔧 **Post-Transform Fixup Hooks**: Automatically recalculate checksums (CRC32, MD5) or payload length fields after mutating body contents.
 - 🎲 **Deterministic PRNG (Xoshiro256++)**: Fast 64-bit random state seeded for exact, reproducible test cases across platforms.
@@ -130,7 +136,7 @@ bin/crowbar --list
 ```text
 === Crowbar Component Catalog ===
 
-Structure-Preserving Rules (18 Formats):
+Structure-Preserving Rules (24 Formats):
   json       Valid JSON AST with mutated leaf values and bounds
   yaml       Valid YAML document hierarchy with mutated scalars
   http       RFC HTTP/1.x framing with mutated headers, paths, or body
@@ -149,6 +155,12 @@ Structure-Preserving Rules (18 Formats):
   mp3        MPEG Layer III audio with ID3v2 tags and synchronized frame headers
   wad        Doom IWAD/PWAD packages with lump directory preservation & struct fuzzing
   pdf        Portable Document Format with object framing & startxref synchronization
+  7z         7-Zip archive framing with automated StartHeader CRC32 fixup
+  tar        POSIX UStar TAR archive framing with automated octal checksum fixup
+  zip        PKZip archive framing with automated length and CRC32 fixup
+  packet     Raw IPv4, TCP, UDP, and PCAP framing with RFC checksum fixups
+  markdown   CommonMark/Markdown documents with link, table, heading & fence mutations
+  jwt        JSON Web Token (RFC 7519) with algorithm confusion, claim boundary, and signature tampering
 
 Mutation Patterns:
   od, once   - Mutate once at a single target
@@ -255,6 +267,114 @@ for i in $(seq 1 100); do
   crowbar session fuzzer next > current.mp3
 done
 ```
+
+### 6. Diagnostic Inspection & Shannon Entropy Profiling (`crowbar inspect`)
+
+Inspect arbitrary input files or streams to examine format boundaries, chunk framing, and block-level Shannon entropy distribution:
+
+```bash
+# Inspect a structured document or binary
+bin/crowbar inspect sample.png
+
+# Or emit machine-readable JSON metrics for CI pipelines
+bin/crowbar inspect payload.jwt --json
+```
+
+**Terminal Output Example:**
+```text
+=== Crowbar Diagnostic Inspector ===
+Target: sample.png | Size: 1,024 B | Format: PNG
+Magic Bytes: 89 50 4E 47 0D 0A 1A 0A
+------------------------------------------------------------------------------
+Structural Format Boundaries:
+  [0x0000 - 0x0007]  Signature            PNG 8-byte file signature [OK]
+  [0x0008 - 0x0020]  Chunk: IHDR          13 B payload, CRC: 0x4D3A12F0 [OK]
+  [0x0021 - 0x03E0]  Chunk: IDAT          959 B payload, CRC: 0xA911B321 [OK]
+  [0x03E1 - 0x03FF]  Chunk: IEND          0 B payload, CRC: 0xAE426082 [OK]
+------------------------------------------------------------------------------
+Shannon Entropy Distribution:
+  Block  Offset Range     Entropy   Profile             Density Bar
+   00    0x0000 - 0x003F    3.42    [Structured/Text]   ██████░░░░░░░░░░ 3.42
+   01    0x0040 - 0x007F    7.91    [Compressed/Random] ████████████████ 7.91
+   ...
+------------------------------------------------------------------------------
+Overall Shannon Entropy: 7.41 bits/byte (High Density / Compressed / Encrypted)
+```
+
+### 7. Anomaly-Preserving Test Case Minimization (`crowbar shrink`)
+
+When fuzzing uncovers crashes or failures in large inputs (e.g. 10KB+ payloads), `crowbar shrink` executes a hierarchical delta-debugging ($DDMIN$) algorithm that reduces the bloated reproducer down to its absolute minimal form:
+
+```bash
+# Minimize crash reproducer using target command as predicate
+bin/crowbar shrink crash.bin --cmd "./target_parser @@" -o crash.min
+
+# Or match specific failure strings in stdout/stderr
+bin/crowbar shrink crash.bin --cmd "./target_parser @@" --match "SIGSEGV" -o crash.min
+```
+
+> **Syntax Anomaly Preservation**: Unlike aggressive AST normalizers that deduplicate keys or alter casing, `crowbar shrink` operates via pure raw delta debugging. It strictly preserves security-critical anomalies such as **duplicate keys** (e.g., `{"role": "user", "role": "admin"}`), parser differential bugs, and broken protocol framing!
+
+### 8. Session Mutation Heatmaps & Shrinking
+
+Audit session mutation coverage or minimize past mutants directly from session storage:
+
+```bash
+# Render session mutation heatmap showing hit frequency per byte offset
+crowbar session audio inspect
+
+# Minimize the mutant generated in iteration #42
+crowbar session audio shrink 42 --cmd "./target_parser @@" -o repro_42.min
+```
+
+### 9. Automated Mutation Fuzzing Campaigns (`crowbar campaign`)
+
+Execute high-throughput, multi-target mutation fuzzing campaigns across built-in parsers or custom protocol targets:
+
+```bash
+# Run a quick 200-iteration campaign across all standard battery targets
+bin/crowbar campaign --iterations 200
+
+# Target specific endpoints (e.g. JSON and JWT parsers)
+bin/crowbar campaign --target json,jwt --iterations 500
+
+# Generate artifacts for CI pipelines (Markdown summary, JSON metrics, and reproducers)
+bin/crowbar campaign -n 1000 --markdown artifacts/fuzz-report.md --json artifacts/fuzz-report.json --output-dir artifacts/fuzz
+```
+
+**Two-Tier Declarative DSL Integration:**
+
+```crystal
+require "crowbar"
+
+# Construct and run an automated campaign with bounded execution timeouts and watchdog invariants
+report = Crowbar.campaign("Nightly Security Hardening") do |c|
+  c.iterations 500
+  c.seed 42_u64
+  c.watchdog 10.seconds # 60-second watchdog compliance
+  c.auto_shrink true    # automatically delta-minimize any failing crash reproducers
+
+  # Define targeted fuzzing endpoints
+  c.target "json_endpoint", category: :serialization do |t|
+    t.sample %({"user": "admin", "permissions": ["read", "write"]})
+    t.rule :json
+    t.expected_errors JSON::ParseException, ArgumentError
+    t.timeout 250.milliseconds
+    t.execute do |buf|
+      JSON.parse(buf.to_s)
+    end
+  end
+
+  # Or load the full standard battery (JSON, YAML, JWT, HTTP, CSV, URI, Base64, Packet)
+  c.include_default_targets!
+end
+
+puts report.to_markdown
+```
+
+### 10. Nightly CI/CD Mutation Fuzzing Workflow
+
+Crowbar includes a dedicated GitHub Actions workflow (`.github/workflows/nightly-fuzz.yml`) that runs every night at `03:00 UTC` and supports manual triggers via `workflow_dispatch`. It runs across Linux and Windows, executes high-throughput mutation campaigns, verifies that zero unhandled crashes or infinite loops occur, minimizes reproducers automatically, and uploads detailed test reports and artifacts.
 
 ---
 

@@ -7,3 +7,6 @@
 *.dll
 *.exe
 *.pdb
+/.crowbar/
+/.crowbar_test_session/
+/artifacts/
