@@ -1,0 +1,90 @@
+name: Nightly Mutation Fuzzing
+
+on:
+  schedule:
+    # 03:00 UTC every day
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: 'Mutation iterations per target'
+        required: false
+        default: '500'
+        type: string
+      target:
+        description: 'Target parser/protocol filter (json, yaml, jwt, http, csv, uri, base64, packet, all)'
+        required: false
+        default: 'all'
+        type: string
+      auto_shrink:
+        description: 'Automatically minimize crash reproducers via delta reducer'
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: Mutation Fuzzing (${{ matrix.os }}, Crystal ${{ matrix.crystal }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        crystal: ["1.21.0", "latest"]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update apt repositories (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update
+
+      - name: Install Crystal (${{ matrix.crystal }})
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: ${{ matrix.crystal }}
+
+      - name: Install Shards Dependencies
+        run: shards install
+
+      - name: Build Crowbar Fuzzing Engine
+        run: shards build crowbar
+
+      - name: Run Nightly Crowbar Mutation Fuzzing Campaign (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p artifacts/fuzz
+          ./bin/crowbar campaign \
+            --iterations ${{ inputs.iterations || '500' }} \
+            --target ${{ inputs.target || 'all' }} \
+            --output-dir artifacts/fuzz \
+            --markdown artifacts/fuzz/fuzz-report.md \
+            --json artifacts/fuzz/fuzz-report.json \
+            --summary-step
+
+      - name: Run Nightly Crowbar Mutation Fuzzing Campaign (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\fuzz
+          .\bin\crowbar.exe campaign `
+            --iterations ${{ inputs.iterations || '500' }} `
+            --target ${{ inputs.target || 'all' }} `
+            --output-dir artifacts\fuzz `
+            --markdown artifacts\fuzz\fuzz-report.md `
+            --json artifacts\fuzz\fuzz-report.json `
+            --summary-step
+
+      - name: Upload Mutation Fuzzing Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crowbar-fuzz-${{ matrix.os }}-crystal-${{ matrix.crystal }}
+          path: artifacts/fuzz/
+          if-no-files-found: warn

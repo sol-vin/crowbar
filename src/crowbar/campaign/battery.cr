@@ -201,6 +201,7 @@ module Crowbar::Campaign
         category: TargetCategory::Protocol,
         expected_errors: [
           ArgumentError,
+          OverflowError,
           IO::Error,
           IndexError,
         ] of Exception.class,
@@ -222,10 +223,10 @@ module Crowbar::Campaign
       target.execution = ->(buf : Buffer) {
         return nil if buf.size < 16
         magic = IO::ByteFormat::BigEndian.decode(UInt32, buf[0, 4].to_slice)
-        len = IO::ByteFormat::BigEndian.decode(UInt32, buf[4, 4].to_slice).to_i
+        len = IO::ByteFormat::BigEndian.decode(UInt32, buf[4, 4].to_slice).to_i64
         stored_crc = IO::ByteFormat::BigEndian.decode(UInt32, buf[8, 4].to_slice)
-        if buf.size >= 16 + len
-          actual_crc = Digest::CRC32.checksum(buf[16, len].to_slice)
+        if len >= 0 && len <= 1_000_000 && buf.size.to_i64 >= 16_i64 + len
+          actual_crc = Digest::CRC32.checksum(buf[16, len.to_i].to_slice)
         end
         nil
       }

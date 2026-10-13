@@ -327,6 +327,55 @@ crowbar session audio inspect
 crowbar session audio shrink 42 --cmd "./target_parser @@" -o repro_42.min
 ```
 
+### 9. Automated Mutation Fuzzing Campaigns (`crowbar campaign`)
+
+Execute high-throughput, multi-target mutation fuzzing campaigns across built-in parsers or custom protocol targets:
+
+```bash
+# Run a quick 200-iteration campaign across all standard battery targets
+bin/crowbar campaign --iterations 200
+
+# Target specific endpoints (e.g. JSON and JWT parsers)
+bin/crowbar campaign --target json,jwt --iterations 500
+
+# Generate artifacts for CI pipelines (Markdown summary, JSON metrics, and reproducers)
+bin/crowbar campaign -n 1000 --markdown artifacts/fuzz-report.md --json artifacts/fuzz-report.json --output-dir artifacts/fuzz
+```
+
+**Two-Tier Declarative DSL Integration:**
+
+```crystal
+require "crowbar"
+
+# Construct and run an automated campaign with bounded execution timeouts and watchdog invariants
+report = Crowbar.campaign("Nightly Security Hardening") do |c|
+  c.iterations 500
+  c.seed 42_u64
+  c.watchdog 10.seconds # 60-second watchdog compliance
+  c.auto_shrink true    # automatically delta-minimize any failing crash reproducers
+
+  # Define targeted fuzzing endpoints
+  c.target "json_endpoint", category: :serialization do |t|
+    t.sample %({"user": "admin", "permissions": ["read", "write"]})
+    t.rule :json
+    t.expected_errors JSON::ParseException, ArgumentError
+    t.timeout 250.milliseconds
+    t.execute do |buf|
+      JSON.parse(buf.to_s)
+    end
+  end
+
+  # Or load the full standard battery (JSON, YAML, JWT, HTTP, CSV, URI, Base64, Packet)
+  c.include_default_targets!
+end
+
+puts report.to_markdown
+```
+
+### 10. Nightly CI/CD Mutation Fuzzing Workflow
+
+Crowbar includes a dedicated GitHub Actions workflow (`.github/workflows/nightly-fuzz.yml`) that runs every night at `03:00 UTC` and supports manual triggers via `workflow_dispatch`. It runs across Linux and Windows, executes high-throughput mutation campaigns, verifies that zero unhandled crashes or infinite loops occur, minimizes reproducers automatically, and uploads detailed test reports and artifacts.
+
 ---
 
 ## Quick Start (Crystal DSL)

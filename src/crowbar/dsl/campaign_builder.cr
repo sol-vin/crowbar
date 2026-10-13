@@ -149,12 +149,12 @@ module Crowbar::DSL
     # Imports a specific target from the standard battery
     def include_target(name : String)
       target = case name.downcase
-               when "json", "json_parser"   then Campaign::Battery.json_target
-               when "yaml", "yaml_parser"   then Campaign::Battery.yaml_target
-               when "jwt", "jwt_validator"  then Campaign::Battery.jwt_target
-               when "http", "http_request"  then Campaign::Battery.http_target
-               when "csv", "csv_parser"     then Campaign::Battery.csv_target
-               when "uri", "uri_parser"     then Campaign::Battery.uri_target
+               when "json", "json_parser"      then Campaign::Battery.json_target
+               when "yaml", "yaml_parser"      then Campaign::Battery.yaml_target
+               when "jwt", "jwt_validator"     then Campaign::Battery.jwt_target
+               when "http", "http_request"     then Campaign::Battery.http_target
+               when "csv", "csv_parser"        then Campaign::Battery.csv_target
+               when "uri", "uri_parser"        then Campaign::Battery.uri_target
                when "base64", "base64_decoder" then Campaign::Battery.base64_target
                when "packet", "packet_framing" then Campaign::Battery.packet_target
                else

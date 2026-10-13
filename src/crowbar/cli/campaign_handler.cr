@@ -173,7 +173,7 @@ module Crowbar::CLI
             ts.iterations,
             ts.passes,
             ts.expected_errors,
-            ts.crashes > 0 ? ts.crashes.to_s.colorize(:red).bold : "0".colorize(:green),
+            ts.crashes > 0 ? Opal.style.bold.fg(:red).render(ts.crashes.to_s) : Opal.style.fg(:green).render("0"),
             ts.throughput_ops_sec
           )
         end

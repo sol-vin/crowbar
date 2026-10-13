@@ -142,7 +142,7 @@ describe "Crowbar CLI - Inspect and Shrink commands" do
       err_io: err_shrink,
       exit_handler: ->(code : Int32) { raise Crowbar::CLI::ExitException.new(code) }
     )
-    app2.run(["session", "shrink_sess", "shrink", "1", "--cmd", "findstr /C:\"TARGET_\" @@", "--match", "TARGET_"])
+    app2.run(["session", "shrink_sess", "shrink", "1", "--cmd", "findstr /C:\"TARGET_\" @@", "--match", "TARGET_", "--timeout", "5000"])
 
     err_str = err_shrink.to_s
     err_str.should contain("Crowbar Session Mutant Shrinker")
