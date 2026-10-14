@@ -52,3 +52,30 @@ sections:
           end
         end
         ```
+
+  - id: topic_02_corpus_gate
+    title: Deterministic Corpus Regression Gates (`Crowbar.corpus_gate`)
+    summary: Replaying crash reproducers and deterministic PRNG seeds inside `crystal spec` under a 60s watchdog budget.
+    content: |
+      `Crowbar.corpus_gate` wraps the Tier 1 `Crowbar::Core::CorpusRunner` engine in a declarative spec builder.
+      It replays static crash reproducers (raw, Base64, hex, directories, or sessions) alongside deterministic
+      PRNG-seeded mutations while enforcing a strict `<= 60.seconds` watchdog budget.
+    examples:
+      - |
+        ```crystal
+        report = Crowbar.corpus_gate("Parser Regression Gate") do |gate|
+          gate.watchdog_budget 60.seconds
+          gate.seed 42_u64
+          gate.iterations 25
+          gate.preserve :json
+          gate.expected_errors JSON::ParseException, ArgumentError
+
+          gate.corpus %({"status": "ok"}), id: "baseline_json"
+          gate.reproducer_base64 "eyJ0cmFwIjogdHJ1ZX0=", id: "repro_01"
+
+          gate.execute do |buf|
+            JSON.parse(buf.to_s)
+          end
+        end
+        ```
+
