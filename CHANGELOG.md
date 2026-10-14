@@ -18,6 +18,7 @@
 - ✓ **[CLI]** use Opal LibC.opal_poll for POSIX STDIN polling (`f7bc427`)
 - ✓ **[CLI]** align LibC PollFD and opal_poll with Opal definitions (`ee85f27`)
 - ✓ **[RULES]** prevent no-op mutations in HTTPRule (`e7bfcf5`)
+- ✓ **[SPEC]** close tempfile handles on Windows and use deterministic shrink predicate (v0.1.43) (`96e9273`)
 
 ### 📚 Documentation
 - 📖 add crowbar.gif banner and update component tables in README (`3eae1a6`)

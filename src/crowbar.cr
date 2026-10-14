@@ -28,6 +28,8 @@ require "./crowbar/campaign/report"
 require "./crowbar/campaign/runner"
 require "./crowbar/campaign/battery"
 require "./crowbar/dsl/campaign_builder"
+require "./crowbar/core/corpus_runner"
+require "./crowbar/dsl/corpus_gate_builder"
 
 {% unless flag?(:release) %}
   require "./docs"

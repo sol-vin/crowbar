@@ -27,6 +27,11 @@
       #       <td><code>.topic_01_scopes_and_fixups</code></td>
       #       <td>Scoping byte ranges, regex captures, and repairing headers with fixups.</td>
       #     </tr>
+      #     <tr>
+      #       <td><strong>Deterministic Corpus Regression Gates (`Crowbar.corpus_gate`)</strong></td>
+      #       <td><code>.topic_02_corpus_gate</code></td>
+      #       <td>Replaying crash reproducers and deterministic PRNG seeds inside `crystal spec` under a 60s watchdog budget.</td>
+      #     </tr>
       #   </tbody>
       # </table>
       #
@@ -107,6 +112,33 @@
         # ```
         #
         def self.topic_01_scopes_and_fixups : Nil; end
+
+        # **Deterministic Corpus Regression Gates (`Crowbarcorpus_gate`)**: Replaying crash reproducers and deterministic PRNG seeds inside `crystal spec` under a 60s watchdog budget.
+        #
+        # `Crowbar.corpus_gate` wraps the Tier 1 `Crowbar::Core::CorpusRunner` engine in a declarative spec builder.
+        # It replays static crash reproducers (raw, Base64, hex, directories, or sessions) alongside deterministic
+        # PRNG-seeded mutations while enforcing a strict `<= 60.seconds` watchdog budget.
+        #
+        # #### Working Examples
+        #
+        # ```
+        # report = Crowbar.corpus_gate("Parser Regression Gate") do |gate|
+        #   gate.watchdog_budget 60.seconds
+        #   gate.seed 42_u64
+        #   gate.iterations 25
+        #   gate.preserve :json
+        #   gate.expected_errors JSON::ParseException, ArgumentError
+        #
+        #   gate.corpus %({"status": "ok"}), id: "baseline_json"
+        #   gate.reproducer_base64 "eyJ0cmFwIjogdHJ1ZX0=", id: "repro_01"
+        #
+        #   gate.execute do |buf|
+        #     JSON.parse(buf.to_s)
+        #   end
+        # end
+        # ```
+        #
+        def self.topic_02_corpus_gate : Nil; end
       end
     end
   end

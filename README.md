@@ -372,7 +372,45 @@ end
 puts report.to_markdown
 ```
 
-### 10. Nightly CI/CD Mutation Fuzzing Workflow
+### 10. Deterministic Corpus Regression Gate (`Crowbar.corpus_gate`)
+
+Embed deterministic seed replay and crash regression assertions directly inside `crystal spec` suites under a strict $\le 60$-second watchdog budget using the Two-Tier `Crowbar::Core::CorpusRunner` engine and `Crowbar.corpus_gate` DSL:
+
+```crystal
+require "spec"
+require "crowbar"
+
+describe "Parser Corpus Regression Gate" do
+  it "replays known crash seeds and deterministic mutations within a 60s watchdog budget" do
+    report = Crowbar.corpus_gate("JSON & Archive Regression Gate") do |gate|
+      gate.watchdog_budget 60.seconds
+      gate.timeout 250.milliseconds
+      gate.seed 42_u64
+      gate.iterations 50
+      gate.preserve :json
+      gate.expected_errors JSON::ParseException, ArgumentError
+
+      # Replay static corpus seeds & Base64/Hex crash reproducers verbatim
+      gate.corpus %({"version": 1, "entries": ["a", "b"]}), id: "valid_manifest"
+      gate.reproducer_base64 "eyJ1bmNsb3NlZCI6IFsxLCAy", id: "issue_101_repro"
+      gate.replay 1337_u64, %({"id": 99}), id: "seeded_mutation_replay"
+
+      gate.execute do |buf|
+        JSON.parse(buf.to_s)
+      end
+
+      gate.assert_invariant("non_empty_buffer") do |buf|
+        buf.size >= 0
+      end
+    end
+
+    report.clean?.should be_true
+    report.within_budget?.should be_true
+  end
+end
+```
+
+### 11. Nightly CI/CD Mutation Fuzzing Workflow
 
 Crowbar includes a dedicated GitHub Actions workflow (`.github/workflows/nightly-fuzz.yml`) that runs every night at `03:00 UTC` and supports manual triggers via `workflow_dispatch`. It runs across Linux and Windows, executes high-throughput mutation campaigns, verifies that zero unhandled crashes or infinite loops occur, minimizes reproducers automatically, and uploads detailed test reports and artifacts.
 

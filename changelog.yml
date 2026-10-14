@@ -262,6 +262,13 @@ releases:
     bullet: •
     hash: 9268a82
     author: Ian Rash
+  - type: fix
+    description: close tempfile handles on Windows and use deterministic shrink predicate
+      (v0.1.43)
+    bullet: ✓
+    badge: '[SPEC]'
+    hash: 96e9273
+    author: Ian Rash
 - version: 0.1.43
   date: "2026-10-13"
   status: released
